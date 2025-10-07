@@ -1,0 +1,11 @@
+name: it-indaba-chatbot-infra
+runtime: python
+description: Infrastructure for IT Indaba 2025 WhatsApp Challenge
+
+config:
+  gcp:project:
+    description: GCP Project ID
+    default: jem-it-indaba-2025
+  gcp:region:
+    description: GCP Region
+    default: us-central1
