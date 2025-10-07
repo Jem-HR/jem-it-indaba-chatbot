@@ -162,7 +162,7 @@ Create a Cloud Build trigger to automatically deploy on git push:
 ```bash
 gcloud builds triggers create github \
   --repo-name=jem-it-indaba-chatbot \
-  --repo-owner=YOUR_GITHUB_USERNAME \
+  --repo-owner=Jem-HR \
   --branch-pattern=^main$ \
   --build-config=cloudbuild.yaml \
   --project=jem-it-indaba-2025

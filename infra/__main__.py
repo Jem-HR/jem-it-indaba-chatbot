@@ -313,5 +313,5 @@ pulumi.export("instructions", pulumi.Output.concat(
     "4. Test the health endpoint:\n",
     "   curl ", cloudrun_service.uri, "/health\n\n",
     "5. (Optional) Set up automated builds:\n",
-    f"   gcloud builds triggers create github --repo-name=jem-it-indaba-chatbot --repo-owner=YOUR_GITHUB_USERNAME --branch-pattern=^main$ --build-config=cloudbuild.yaml --project={project}\n"
+    f"   gcloud builds triggers create github --repo-name=jem-it-indaba-chatbot --repo-owner=Jem-HR --branch-pattern=^main$ --build-config=cloudbuild.yaml --project={project}\n"
 ))
