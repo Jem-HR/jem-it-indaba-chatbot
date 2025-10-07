@@ -1,0 +1,50 @@
+steps:
+  # Build the Docker image
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'build'
+      - '-t'
+      - 'gcr.io/$PROJECT_ID/it-indaba-chatbot:$COMMIT_SHA'
+      - '-t'
+      - 'gcr.io/$PROJECT_ID/it-indaba-chatbot:latest'
+      - '.'
+    id: 'build-image'
+
+  # Push the Docker image to GCR
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'push'
+      - 'gcr.io/$PROJECT_ID/it-indaba-chatbot:$COMMIT_SHA'
+    id: 'push-image-sha'
+
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'push'
+      - 'gcr.io/$PROJECT_ID/it-indaba-chatbot:latest'
+    id: 'push-image-latest'
+
+  # Deploy to Cloud Run
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: gcloud
+    args:
+      - 'run'
+      - 'services'
+      - 'update'
+      - 'it-indaba-chatbot'
+      - '--image=gcr.io/$PROJECT_ID/it-indaba-chatbot:$COMMIT_SHA'
+      - '--region=$_REGION'
+      - '--platform=managed'
+    id: 'deploy-cloud-run'
+
+substitutions:
+  _REGION: us-central1
+
+options:
+  machineType: 'E2_HIGHCPU_8'
+  logging: CLOUD_LOGGING_ONLY
+
+images:
+  - 'gcr.io/$PROJECT_ID/it-indaba-chatbot:$COMMIT_SHA'
+  - 'gcr.io/$PROJECT_ID/it-indaba-chatbot:latest'
+
+timeout: '1200s'

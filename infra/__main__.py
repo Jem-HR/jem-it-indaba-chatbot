@@ -17,6 +17,8 @@ apis_to_enable = [
     "secretmanager.googleapis.com",
     "vpcaccess.googleapis.com",
     "servicenetworking.googleapis.com",
+    "cloudbuild.googleapis.com",
+    "containerregistry.googleapis.com",
 ]
 
 enabled_apis = []
@@ -114,6 +116,35 @@ cloudrun_invoker_binding = gcp.projects.IAMMember(
     member="allUsers",
 )
 
+# Get project number for Cloud Build service account
+project_info = gcp.organizations.get_project()
+
+# Grant Cloud Build service account permissions to deploy to Cloud Run
+cloudbuild_run_admin = gcp.projects.IAMMember(
+    "cloudbuild-run-admin",
+    project=project,
+    role="roles/run.admin",
+    member=f"serviceAccount:{project_info.number}@cloudbuild.gserviceaccount.com",
+    opts=pulumi.ResourceOptions(depends_on=enabled_apis)
+)
+
+cloudbuild_sa_user = gcp.projects.IAMMember(
+    "cloudbuild-sa-user",
+    project=project,
+    role="roles/iam.serviceAccountUser",
+    member=f"serviceAccount:{project_info.number}@cloudbuild.gserviceaccount.com",
+    opts=pulumi.ResourceOptions(depends_on=enabled_apis)
+)
+
+# Grant Cloud Build access to Storage (for GCR)
+cloudbuild_storage_admin = gcp.projects.IAMMember(
+    "cloudbuild-storage-admin",
+    project=project,
+    role="roles/storage.admin",
+    member=f"serviceAccount:{project_info.number}@cloudbuild.gserviceaccount.com",
+    opts=pulumi.ResourceOptions(depends_on=enabled_apis)
+)
+
 # Create Secret Manager secrets (placeholders - actual values set via CLI or console)
 whatsapp_token_secret = gcp.secretmanager.Secret(
     "whatsapp-api-token",
@@ -159,12 +190,11 @@ whatsapp_verify_token_version = gcp.secretmanager.SecretVersion(
     secret_data="challenge_token_2025",
 )
 
-# Build and push Docker image to Google Container Registry
-# Note: This assumes you've built the image locally first
-# Run: docker build -t gcr.io/{project}/it-indaba-chatbot:latest .
-# Run: docker push gcr.io/{project}/it-indaba-chatbot:latest
+# Build and push Docker image using Cloud Build (not local Docker)
+# Cloud Build will handle building and pushing to GCR
+# Run: gcloud builds submit --config cloudbuild.yaml
 
-# For now, we'll reference the image location
+# Reference the image location
 image_name = f"gcr.io/{project}/it-indaba-chatbot:latest"
 
 # Create Cloud Run service
@@ -272,9 +302,8 @@ pulumi.export("vpc_connector_name", vpc_connector.name)
 # Export instructions
 pulumi.export("instructions", pulumi.Output.concat(
     "\n\n=== SETUP INSTRUCTIONS ===\n\n",
-    "1. Build and push Docker image:\n",
-    f"   docker build -t gcr.io/{project}/it-indaba-chatbot:latest .\n",
-    f"   docker push gcr.io/{project}/it-indaba-chatbot:latest\n\n",
+    "1. Build and deploy with Cloud Build:\n",
+    f"   gcloud builds submit --config cloudbuild.yaml --project={project}\n\n",
     "2. Update WhatsApp secrets:\n",
     f"   echo -n 'YOUR_TOKEN' | gcloud secrets versions add whatsapp-api-token --data-file=- --project={project}\n",
     f"   echo -n 'YOUR_PHONE_ID' | gcloud secrets versions add whatsapp-phone-number-id --data-file=- --project={project}\n\n",
@@ -282,5 +311,7 @@ pulumi.export("instructions", pulumi.Output.concat(
     "   URL: ", cloudrun_service.uri, "/webhook\n",
     "   Verify Token: challenge_token_2025\n\n",
     "4. Test the health endpoint:\n",
-    "   curl ", cloudrun_service.uri, "/health\n"
+    "   curl ", cloudrun_service.uri, "/health\n\n",
+    "5. (Optional) Set up automated builds:\n",
+    f"   gcloud builds triggers create github --repo-name=jem-it-indaba-chatbot --repo-owner=YOUR_GITHUB_USERNAME --branch-pattern=^main$ --build-config=cloudbuild.yaml --project={project}\n"
 ))

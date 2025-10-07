@@ -88,7 +88,25 @@ ngrok http 8080
 
 ## 📦 Deployment
 
-### Build and Deploy with Pulumi
+### Method 1: Quick Deploy (Recommended)
+
+Use the automated deployment script:
+
+```bash
+# Set your project ID (optional, defaults to jem-it-indaba-2025)
+export GCP_PROJECT_ID=jem-it-indaba-2025
+
+# Run deployment script
+./deploy.sh
+```
+
+The script will:
+- Authenticate with GCP
+- Build Docker image using Cloud Build
+- Push to Google Container Registry
+- Deploy to Cloud Run
+
+### Method 2: Manual Deploy
 
 1. **Authenticate with GCP**:
    ```bash
@@ -96,18 +114,7 @@ ngrok http 8080
    gcloud config set project jem-it-indaba-2025
    ```
 
-2. **Configure Docker for GCR**:
-   ```bash
-   gcloud auth configure-docker
-   ```
-
-3. **Build and push Docker image**:
-   ```bash
-   docker build -t gcr.io/jem-it-indaba-2025/it-indaba-chatbot:latest .
-   docker push gcr.io/jem-it-indaba-2025/it-indaba-chatbot:latest
-   ```
-
-4. **Deploy infrastructure with Pulumi**:
+2. **Deploy infrastructure with Pulumi**:
    ```bash
    cd infra
    pip install -r requirements.txt
@@ -118,23 +125,50 @@ ngrok http 8080
    pulumi up
    ```
 
-5. **Update secrets with actual values**:
+3. **Build and deploy application with Cloud Build**:
+   ```bash
+   cd ..  # Back to project root
+   gcloud builds submit --config cloudbuild.yaml --project=jem-it-indaba-2025
+   ```
+
+   This will:
+   - Build the Docker image in the cloud (no local Docker needed!)
+   - Push to Google Container Registry
+   - Deploy the new version to Cloud Run
+
+4. **Update secrets with actual values**:
    ```bash
    echo -n 'YOUR_WHATSAPP_TOKEN' | gcloud secrets versions add whatsapp-api-token --data-file=- --project=jem-it-indaba-2025
    echo -n 'YOUR_PHONE_NUMBER_ID' | gcloud secrets versions add whatsapp-phone-number-id --data-file=- --project=jem-it-indaba-2025
    ```
 
-6. **Get webhook URL**:
+5. **Get webhook URL**:
    ```bash
+   cd infra
    pulumi stack output webhook_url
    ```
 
-7. **Configure WhatsApp webhook**:
+6. **Configure WhatsApp webhook**:
    - Go to Meta Developer Console
    - Navigate to WhatsApp > Configuration
-   - Set Callback URL to the webhook_url from step 6
+   - Set Callback URL to the webhook_url from step 5
    - Set Verify Token to: `challenge_token_2025`
    - Subscribe to `messages` webhook
+
+### Optional: Set up Automated Deployments
+
+Create a Cloud Build trigger to automatically deploy on git push:
+
+```bash
+gcloud builds triggers create github \
+  --repo-name=jem-it-indaba-chatbot \
+  --repo-owner=YOUR_GITHUB_USERNAME \
+  --branch-pattern=^main$ \
+  --build-config=cloudbuild.yaml \
+  --project=jem-it-indaba-2025
+```
+
+After setup, every push to the `main` branch will automatically build and deploy!
 
 ## 🎮 Game Design
 
@@ -229,8 +263,11 @@ it-indada-2025/
 │   ├── Pulumi.yaml          # Pulumi config
 │   └── requirements.txt     # Pulumi dependencies
 ├── Dockerfile               # Container image
+├── cloudbuild.yaml          # Cloud Build configuration
+├── deploy.sh                # Deployment script
 ├── requirements.txt         # Python dependencies
-├── .env.example            # Environment template
+├── .env.example             # Environment template
+├── .dockerignore            # Docker ignore patterns
 ├── .gitignore
 └── README.md
 ```
@@ -242,6 +279,8 @@ it-indada-2025/
 - **app/redis_store.py**: User state management
 - **app/whatsapp.py**: WhatsApp Cloud API integration
 - **infra/__main__.py**: Complete GCP infrastructure definition
+- **cloudbuild.yaml**: Cloud Build CI/CD configuration
+- **deploy.sh**: Automated deployment script
 
 ## 📝 API Endpoints
 
