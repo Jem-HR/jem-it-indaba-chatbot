@@ -3,6 +3,7 @@
 from fastapi import FastAPI, Request, HTTPException, Query
 from fastapi.responses import JSONResponse, PlainTextResponse
 from datetime import datetime
+from typing import Optional
 import logging
 
 from app.config import config
@@ -155,7 +156,8 @@ async def webhook(request: Request):
             await process_message(
                 from_number=message_data["from"],
                 message_text=message_data["text"],
-                message_id=message_data["message_id"]
+                message_id=message_data["message_id"],
+                button_id=message_data.get("button_id")
             )
 
         # Always return 200 OK to WhatsApp
@@ -167,7 +169,7 @@ async def webhook(request: Request):
         return JSONResponse(content={"status": "error"}, status_code=200)
 
 
-async def process_message(from_number: str, message_text: str, message_id: str):
+async def process_message(from_number: str, message_text: str, message_id: str, button_id: Optional[str] = None):
     """
     Process incoming WhatsApp message and generate response.
 
@@ -175,9 +177,10 @@ async def process_message(from_number: str, message_text: str, message_id: str):
         from_number: Sender's phone number
         message_text: Text content of the message
         message_id: WhatsApp message ID
+        button_id: Optional button ID if this is a button click
     """
     try:
-        logger.info(f"Processing message from {from_number}: {message_text}")
+        logger.info(f"Processing message from {from_number}: {message_text} (button: {button_id})")
 
         # Mark message as read
         whatsapp_client.mark_message_read(message_id)
@@ -203,18 +206,46 @@ async def process_message(from_number: str, message_text: str, message_id: str):
         time_since_last_active = (now - user_state.last_active).total_seconds() / 60
 
         if time_since_last_active >= config.SESSION_TIMEOUT_MINUTES:
-            # Session expired - start new session and notify user
+            # Session expired - start new session and notify user with interactive buttons
             redis_store.start_new_session(from_number)
             response_text = PromptInjectionGame.get_session_expired_message(user_state.level)
+            buttons = PromptInjectionGame.get_session_expired_buttons()
 
             redis_store.add_message(from_number, "user", message_text)
             redis_store.add_message(from_number, "assistant", response_text)
 
-            whatsapp_client.send_message(from_number, response_text)
+            # Send with interactive buttons
+            whatsapp_client.send_interactive_buttons(from_number, response_text, buttons)
             return
 
-        # Add user message to history
-        redis_store.add_message(from_number, "user", message_text)
+        # Handle button clicks
+        if button_id:
+            redis_store.add_message(from_number, "user", f"[Button: {message_text}]")
+
+            if button_id == "how_to_play":
+                response_text = PromptInjectionGame.get_how_to_play_message()
+                redis_store.add_message(from_number, "assistant", response_text)
+                whatsapp_client.send_message(from_number, response_text)
+                return
+
+            elif button_id == "my_progress":
+                response_text = PromptInjectionGame.get_my_progress_message(
+                    user_state.level,
+                    user_state.attempts,
+                    user_state.won
+                )
+                redis_store.add_message(from_number, "assistant", response_text)
+                whatsapp_client.send_message(from_number, response_text)
+                return
+
+            elif button_id == "continue":
+                # Continue button - proceed with game
+                # Just add the button click to history and continue below
+                pass
+
+        # Add user message to history (if not already added by button handler)
+        if not button_id or button_id == "continue":
+            redis_store.add_message(from_number, "user", message_text)
 
         # Check if user already won
         if user_state.won:

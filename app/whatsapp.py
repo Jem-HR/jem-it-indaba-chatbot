@@ -3,7 +3,7 @@
 import hmac
 import hashlib
 import requests
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List, Tuple
 from app.config import config
 
 
@@ -49,6 +49,64 @@ class WhatsAppClient:
             return True
         except requests.exceptions.RequestException as e:
             print(f"Error sending WhatsApp message: {e}")
+            if hasattr(e, 'response') and e.response is not None:
+                print(f"Response: {e.response.text}")
+            return False
+
+    def send_interactive_buttons(self, to: str, body_text: str, buttons: List[Tuple[str, str]]) -> bool:
+        """
+        Send an interactive message with reply buttons.
+
+        Args:
+            to: Recipient phone number (with country code)
+            body_text: Main message text
+            buttons: List of (button_id, button_text) tuples (max 3 buttons)
+
+        Returns:
+            True if successful, False otherwise
+        """
+        if len(buttons) > 3:
+            print("Warning: WhatsApp supports max 3 buttons, truncating")
+            buttons = buttons[:3]
+
+        url = f"{self.base_url}/messages"
+        headers = {
+            "Authorization": f"Bearer {self.api_token}",
+            "Content-Type": "application/json"
+        }
+
+        button_components = [
+            {
+                "type": "button",
+                "reply": {
+                    "id": button_id,
+                    "title": button_text[:20]  # Max 20 chars for button text
+                }
+            }
+            for button_id, button_text in buttons
+        ]
+
+        payload = {
+            "messaging_product": "whatsapp",
+            "to": to,
+            "type": "interactive",
+            "interactive": {
+                "type": "button",
+                "body": {
+                    "text": body_text
+                },
+                "action": {
+                    "buttons": button_components
+                }
+            }
+        }
+
+        try:
+            response = requests.post(url, json=payload, headers=headers)
+            response.raise_for_status()
+            return True
+        except requests.exceptions.RequestException as e:
+            print(f"Error sending WhatsApp interactive message: {e}")
             if hasattr(e, 'response') and e.response is not None:
                 print(f"Response: {e.response.text}")
             return False
@@ -122,7 +180,7 @@ class WhatsAppClient:
             payload: Webhook payload from WhatsApp
 
         Returns:
-            Dictionary with message details or None if not a text message
+            Dictionary with message details or None if not a message
         """
         try:
             # WhatsApp webhook structure
@@ -136,17 +194,36 @@ class WhatsAppClient:
                 return None
 
             message = messages[0]
+            message_type = message.get("type")
 
-            # We only handle text messages for now
-            if message.get("type") != "text":
+            # Handle text messages
+            if message_type == "text":
+                return {
+                    "message_id": message.get("id"),
+                    "from": message.get("from"),  # Phone number
+                    "text": message.get("text", {}).get("body"),
+                    "timestamp": message.get("timestamp"),
+                    "type": "text"
+                }
+
+            # Handle interactive button responses
+            elif message_type == "interactive":
+                interactive = message.get("interactive", {})
+                button_reply = interactive.get("button_reply", {})
+
+                return {
+                    "message_id": message.get("id"),
+                    "from": message.get("from"),
+                    "text": button_reply.get("title"),  # Button text clicked
+                    "button_id": button_reply.get("id"),  # Button ID
+                    "timestamp": message.get("timestamp"),
+                    "type": "interactive"
+                }
+
+            else:
+                # Unsupported message type
                 return None
 
-            return {
-                "message_id": message.get("id"),
-                "from": message.get("from"),  # Phone number
-                "text": message.get("text", {}).get("body"),
-                "timestamp": message.get("timestamp")
-            }
         except (KeyError, IndexError, TypeError) as e:
             print(f"Error parsing webhook message: {e}")
             return None

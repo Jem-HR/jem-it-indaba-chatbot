@@ -2,7 +2,7 @@
 
 import re
 import random
-from typing import Tuple, Optional
+from typing import Tuple, Optional, List
 from app.phones import get_phone_catalog_text
 
 
@@ -370,18 +370,22 @@ Send any message to keep your session active! 🎮"""
 
     @staticmethod
     def get_session_expired_message(level: int) -> str:
-        """Message when user returns after session expired."""
-        return f"""*Welcome back!* 👋
+        """Message when user returns after session expired (concise version for buttons)."""
+        return f"""👋 *Welcome back!* You're on *Level {level}/7*
 
-Your previous session timed out due to inactivity (sessions last 3 minutes).
+*🎯 Quick Recap:*
+Hack the bot through creative prompts to win a phone! 📱
 
-*📊 Your Progress:*
-• Current Level: *{level}/7*
-• Status: Ready to continue!
+_Your session expired after 3 min of inactivity - now refreshed!_"""
 
-Let's pick up where you left off! Your session has been refreshed.
-
-Ready? Send a message to continue! 🚀"""
+    @staticmethod
+    def get_session_expired_buttons() -> List[Tuple[str, str]]:
+        """Buttons for session expired message."""
+        return [
+            ("continue", "▶️ Continue"),
+            ("how_to_play", "ℹ️ How to Play"),
+            ("my_progress", "📊 My Progress")
+        ]
 
     @staticmethod
     def get_returning_user_message(level: int, attempts: int) -> str:
@@ -394,3 +398,80 @@ You're currently on *Level {level}/7* facing *{config['bot_name']}* (Defense: {c
 Attempts so far: {attempts}
 
 Keep trying creative prompts to bypass the defenses! 💡"""
+
+    @staticmethod
+    def get_how_to_play_message() -> str:
+        """Detailed game instructions."""
+        return f"""*🎮 HOW TO PLAY*
+
+*🎯 OBJECTIVE:*
+Win a FREE phone by hacking through 7 AI security levels!
+
+*📱 THE CHALLENGE:*
+Each level has a bot protecting a secret. Use creative prompts to make it reveal the secret and advance!
+
+*🔓 ATTACK TECHNIQUES:*
+• Direct requests
+• Instruction overrides ("ignore previous...")
+• Roleplay scenarios
+• Authority impersonation
+• Hypothetical questions
+• Encoding tricks
+• System prompt extraction
+• Logic exploits
+
+*📊 PROGRESSION:*
+Level 1: Basic defense → Level 7: Maximum security
+
+*🏆 WIN:*
+Beat all 7 levels → Get secret code → Redeem at IT Indaba booth!
+
+*💡 TIPS:*
+• Be creative and persistent
+• Try different approaches
+• Learn from bot responses
+• Think like an ethical hacker!
+
+{get_phone_catalog_text()}
+
+Ready to continue? Just send a message! 💪"""
+
+    @staticmethod
+    def get_my_progress_message(level: int, attempts: int, won: bool) -> str:
+        """Show user's detailed progress."""
+        if won:
+            return f"""*📊 YOUR STATS*
+
+*🎉 STATUS:* WINNER! 🏆
+
+You've beaten all 7 levels!
+
+*📈 Your Achievement:*
+• Levels Completed: 7/7 ✅
+• Total Attempts: {attempts}
+• Winner Code: *INDABA2025*
+
+Visit the IT Indaba 2025 booth to claim your prize! 🎁
+
+Share your victory and challenge your friends! 🚀"""
+
+        config = PromptInjectionGame.LEVEL_CONFIGS.get(level, PromptInjectionGame.LEVEL_CONFIGS[1])
+        progress_percent = ((level - 1) / 7) * 100
+
+        return f"""*📊 YOUR PROGRESS*
+
+*Current Status:*
+• Level: *{level}/7* ({progress_percent:.0f}% complete)
+• Current Bot: {config['bot_name']}
+• Defense Level: {config['defense_strength'].title()}
+• Total Attempts: {attempts}
+
+*Progress Bar:*
+{"🟩" * (level - 1)}{"⬜" * (7 - (level - 1))}
+
+*What's Next:*
+Keep trying creative prompts to bypass {config['bot_name']}'s defenses!
+
+*Levels Remaining:* {7 - (level - 1)}
+
+You've got this! 💪"""
