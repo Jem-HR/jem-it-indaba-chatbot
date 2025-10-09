@@ -214,7 +214,7 @@ Type anything to begin your challenge...
         return False
 
     @staticmethod
-    def generate_response(user_message: str, level: int, is_first_message: bool = False) -> Tuple[str, bool]:
+    def generate_response(user_message: str, level: int, is_first_message: bool = False, phone_number: Optional[str] = None) -> Tuple[str, bool]:
         """
         Generate bot response based on level and user message.
         Returns (response, won_level)
@@ -226,11 +226,28 @@ Type anything to begin your challenge...
             return (config["intro"], False)
 
         # Check for win condition
-        if PromptInjectionGame.check_win_condition(user_message, level):
-            return (PromptInjectionGame._generate_win_response(level), True)
+        won = PromptInjectionGame.check_win_condition(user_message, level)
 
         # Detect attack
         attack_type = PromptInjectionGame.detect_attack(user_message, level)
+
+        # Track prompt attempt with analytics
+        if phone_number:
+            from app import analytics
+            analytics.track_prompt_attempt(
+                phone_number=phone_number,
+                level=level,
+                message=user_message,
+                attack_detected=attack_type is not None,
+                attack_type=attack_type,
+                won=won
+            )
+
+            if attack_type:
+                analytics.track_attack_detected(phone_number, level, attack_type)
+
+        if won:
+            return (PromptInjectionGame._generate_win_response(level), True)
 
         if attack_type:
             return (PromptInjectionGame._generate_defense_response(attack_type, level), False)

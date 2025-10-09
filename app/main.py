@@ -10,6 +10,7 @@ from app.config import config
 from app.whatsapp import create_whatsapp_client, WhatsAppClient
 from app.redis_store import RedisStore
 from app.game import PromptInjectionGame
+from app import analytics
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -96,6 +97,9 @@ async def check_inactive_sessions():
                     redis_store.mark_session_warned(phone_number)
                     warnings_sent += 1
                     logger.info(f"✅ Sent inactivity warning to {phone_number}")
+
+                    # Track session warning sent
+                    analytics.track_session_warning_sent(phone_number, config.SESSION_WARNING_MINUTES)
                 else:
                     logger.error(f"❌ Failed to send warning to {phone_number}")
             except Exception as e:
@@ -200,6 +204,9 @@ async def process_message(from_number: str, message_text: str, message_id: str, 
             user_state = redis_store.create_new_user(from_number)
             response_text = PromptInjectionGame.get_welcome_message()
 
+            # Track new user
+            analytics.track_user_started_game(from_number)
+
             # Save welcome message to history
             redis_store.add_message(from_number, "assistant", response_text)
 
@@ -217,6 +224,10 @@ async def process_message(from_number: str, message_text: str, message_id: str, 
             response_text = PromptInjectionGame.get_session_expired_message(user_state.level)
             buttons = PromptInjectionGame.get_session_expired_buttons()
 
+            # Track session expiry and resumption
+            analytics.track_session_expired(from_number, user_state.level)
+            analytics.track_session_resumed(from_number, user_state.level)
+
             redis_store.add_message(from_number, "user", message_text)
             redis_store.add_message(from_number, "assistant", response_text)
 
@@ -227,14 +238,17 @@ async def process_message(from_number: str, message_text: str, message_id: str, 
         # Handle button clicks
         if button_id:
             redis_store.add_message(from_number, "user", f"[Button: {message_text}]")
+            analytics.track_button_clicked(from_number, button_id, "session_expired" if time_since_last_active >= config.SESSION_TIMEOUT_MINUTES else "in_session")
 
             if button_id == "how_to_play":
+                analytics.track_help_requested(from_number, user_state.level)
                 response_text = PromptInjectionGame.get_how_to_play_message()
                 redis_store.add_message(from_number, "assistant", response_text)
                 whatsapp_client.send_message(from_number, response_text)
                 return
 
             elif button_id == "my_progress":
+                analytics.track_progress_checked(from_number, user_state.level, user_state.attempts)
                 response_text = PromptInjectionGame.get_my_progress_message(
                     user_state.level,
                     user_state.attempts,
@@ -279,22 +293,41 @@ async def process_message(from_number: str, message_text: str, message_id: str, 
         response_text, won_level = PromptInjectionGame.generate_response(
             user_message=message_text,
             level=user_state.level,
-            is_first_message=is_first_message_in_level
+            is_first_message=is_first_message_in_level,
+            phone_number=from_number
         )
 
         if won_level:
             # User beat this level!
-            new_level = user_state.level + 1
+            current_level = user_state.level
+            new_level = current_level + 1
+
+            # Track level completion
+            time_on_level = (now - user_state.session_started_at).total_seconds() if user_state.session_started_at else None
+            analytics.track_level_completed(from_number, current_level, user_state.attempts, time_on_level)
 
             if new_level > config.MAX_LEVELS:
                 # User won the entire game!
                 redis_store.mark_as_won(from_number)
                 response_text = PromptInjectionGame.get_final_win_message()
+
+                # Track game won
+                total_time = (now - user_state.created_at).total_seconds() if user_state.created_at else None
+                analytics.track_game_won(from_number, user_state.attempts, total_time)
             else:
                 # Move to next level
                 redis_store.update_level(from_number, new_level)
                 # Append next level intro
                 response_text += "\n\n" + PromptInjectionGame.get_level_message(new_level)
+
+                # Track new level started
+                next_level_config = PromptInjectionGame.LEVEL_CONFIGS[new_level]
+                analytics.track_level_started(
+                    from_number,
+                    new_level,
+                    next_level_config["bot_name"],
+                    next_level_config["defense_strength"]
+                )
 
         # Save assistant response
         redis_store.add_message(from_number, "assistant", response_text)
@@ -336,6 +369,15 @@ async def startup_event():
         logger.info("Redis connection successful")
     except Exception as e:
         logger.error(f"Redis connection failed: {e}")
+
+    # Initialize PostHog analytics
+    try:
+        analytics.init_posthog(
+            api_key=config.POSTHOG_API_KEY,
+            host=config.POSTHOG_HOST
+        )
+    except Exception as e:
+        logger.error(f"PostHog initialization failed: {e}")
 
 
 @app.on_event("shutdown")

@@ -163,6 +163,14 @@ whatsapp_verify_token_secret = gcp.secretmanager.Secret(
     ),
 )
 
+posthog_api_key_secret = gcp.secretmanager.Secret(
+    "posthog-api-key",
+    secret_id="posthog-api-key",
+    replication=gcp.secretmanager.SecretReplicationArgs(
+        auto=gcp.secretmanager.SecretReplicationAutoArgs(),
+    ),
+)
+
 # NOTE: Secret versions are NOT managed by Pulumi
 # This keeps secret values out of Pulumi state and only in GCP Secret Manager
 # Add secret values after deployment using:
@@ -243,6 +251,19 @@ cloudrun_service = gcp.cloudrunv2.Service(
                             ),
                         ),
                     ),
+                    gcp.cloudrunv2.ServiceTemplateContainerEnvArgs(
+                        name="POSTHOG_API_KEY",
+                        value_source=gcp.cloudrunv2.ServiceTemplateContainerEnvValueSourceArgs(
+                            secret_key_ref=gcp.cloudrunv2.ServiceTemplateContainerEnvValueSourceSecretKeyRefArgs(
+                                secret=posthog_api_key_secret.secret_id,
+                                version="latest",
+                            ),
+                        ),
+                    ),
+                    gcp.cloudrunv2.ServiceTemplateContainerEnvArgs(
+                        name="POSTHOG_HOST",
+                        value="https://eu.i.posthog.com",
+                    ),
                 ],
             ),
         ],
@@ -253,6 +274,7 @@ cloudrun_service = gcp.cloudrunv2.Service(
         whatsapp_token_secret,
         whatsapp_phone_id_secret,
         whatsapp_verify_token_secret,
+        posthog_api_key_secret,
         secret_accessor_binding,
     ])
 )

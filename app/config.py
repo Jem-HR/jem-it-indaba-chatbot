@@ -24,6 +24,10 @@ class Config:
     SESSION_TIMEOUT_MINUTES: int = 3  # Session expires after 3 minutes of inactivity
     SESSION_WARNING_MINUTES: int = 2  # Send warning after 2 minutes of inactivity
 
+    # PostHog Analytics
+    POSTHOG_API_KEY: str = os.getenv("POSTHOG_API_KEY", "")
+    POSTHOG_HOST: str = os.getenv("POSTHOG_HOST", "https://eu.i.posthog.com")
+
     # GCP
     GCP_PROJECT_ID: str = os.getenv("GCP_PROJECT_ID", "jem-it-indaba-2025")
 
