@@ -38,6 +38,7 @@ class RedisStore:
             # Parse datetime fields
             user_dict["created_at"] = datetime.fromisoformat(user_dict["created_at"])
             user_dict["last_active"] = datetime.fromisoformat(user_dict["last_active"])
+            user_dict["session_started_at"] = datetime.fromisoformat(user_dict["session_started_at"]) if user_dict.get("session_started_at") else None
             # Parse messages
             user_dict["messages"] = [
                 Message(
@@ -61,6 +62,7 @@ class RedisStore:
             user_dict = user_state.dict()
             user_dict["created_at"] = user_state.created_at.isoformat()
             user_dict["last_active"] = user_state.last_active.isoformat()
+            user_dict["session_started_at"] = user_state.session_started_at.isoformat() if user_state.session_started_at else None
             user_dict["messages"] = [
                 {
                     "role": msg.role,
