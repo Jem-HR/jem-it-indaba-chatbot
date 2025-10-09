@@ -28,6 +28,9 @@ class Config:
     POSTHOG_API_KEY: str = os.getenv("POSTHOG_API_KEY", "")
     POSTHOG_HOST: str = os.getenv("POSTHOG_HOST", "https://eu.i.posthog.com")
 
+    # Assets
+    JEM_LOGO_URL: str = os.getenv("JEM_LOGO_URL", "https://storage.googleapis.com/jem-it-indaba-assets/jem-mobile-pp.jpg")
+
     # GCP
     GCP_PROJECT_ID: str = os.getenv("GCP_PROJECT_ID", "jem-it-indaba-2025")
 

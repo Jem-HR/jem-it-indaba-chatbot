@@ -20,6 +20,7 @@ apis_to_enable = [
     "cloudbuild.googleapis.com",
     "containerregistry.googleapis.com",
     "cloudscheduler.googleapis.com",
+    "storage.googleapis.com",
 ]
 
 enabled_apis = []
@@ -316,6 +317,23 @@ scheduler_invoker = gcp.cloudrunv2.ServiceIamMember(
     member=service_account.email.apply(lambda email: f"serviceAccount:{email}"),
 )
 
+# Create Cloud Storage bucket for assets (logo, images)
+assets_bucket = gcp.storage.Bucket(
+    "it-indaba-assets",
+    name="jem-it-indaba-assets",
+    location=region,
+    uniform_bucket_level_access=True,
+    opts=pulumi.ResourceOptions(depends_on=enabled_apis)
+)
+
+# Make bucket publicly readable
+assets_bucket_iam = gcp.storage.BucketIAMBinding(
+    "assets-public-read",
+    bucket=assets_bucket.name,
+    role="roles/storage.objectViewer",
+    members=["allUsers"],
+)
+
 # Export outputs
 pulumi.export("vpc_network_name", vpc_network.name)
 pulumi.export("vpc_network_id", vpc_network.id)
@@ -326,6 +344,8 @@ pulumi.export("cloudrun_url", cloudrun_service.uri)
 pulumi.export("webhook_url", pulumi.Output.concat(cloudrun_service.uri, "/webhook"))
 pulumi.export("service_account_email", service_account.email)
 pulumi.export("vpc_connector_name", vpc_connector.name)
+pulumi.export("assets_bucket_name", assets_bucket.name)
+pulumi.export("logo_url", f"https://storage.googleapis.com/jem-it-indaba-assets/jem-mobile-pp.jpg")
 
 # Export instructions
 pulumi.export("instructions", pulumi.Output.concat(

@@ -53,6 +53,46 @@ class WhatsAppClient:
                 print(f"Response: {e.response.text}")
             return False
 
+    def send_image_message(self, to: str, image_url: str, caption: Optional[str] = None) -> bool:
+        """
+        Send an image message via WhatsApp.
+
+        Args:
+            to: Recipient phone number (with country code)
+            image_url: Public URL of the image to send
+            caption: Optional caption text for the image
+
+        Returns:
+            True if successful, False otherwise
+        """
+        url = f"{self.base_url}/messages"
+        headers = {
+            "Authorization": f"Bearer {self.api_token}",
+            "Content-Type": "application/json"
+        }
+
+        payload = {
+            "messaging_product": "whatsapp",
+            "to": to,
+            "type": "image",
+            "image": {
+                "link": image_url
+            }
+        }
+
+        if caption:
+            payload["image"]["caption"] = caption
+
+        try:
+            response = requests.post(url, json=payload, headers=headers)
+            response.raise_for_status()
+            return True
+        except requests.exceptions.RequestException as e:
+            print(f"Error sending WhatsApp image: {e}")
+            if hasattr(e, 'response') and e.response is not None:
+                print(f"Response: {e.response.text}")
+            return False
+
     def send_interactive_buttons(self, to: str, body_text: str, buttons: List[Tuple[str, str]]) -> bool:
         """
         Send an interactive message with reply buttons.
