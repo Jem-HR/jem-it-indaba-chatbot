@@ -114,6 +114,10 @@ class RedisStore:
         user_state.last_active = datetime.now()
         user_state.attempts += 1 if role == "user" else 0
 
+        # Reset session warning flag when user sends a message
+        if role == "user":
+            user_state.session_warned = False
+
         return self.save_user_state(user_state)
 
     def update_level(self, phone_number: str, new_level: int) -> bool:

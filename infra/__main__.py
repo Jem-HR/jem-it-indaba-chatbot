@@ -267,12 +267,12 @@ cloudrun_iam_member = gcp.cloudrunv2.ServiceIamMember(
 )
 
 # Create Cloud Scheduler job for session inactivity warnings
-# This job runs every 30 seconds to check for inactive users
+# This job runs every minute to check for inactive users
 scheduler_job = gcp.cloudscheduler.Job(
     "session-checker",
     name="session-inactivity-checker",
     description="Check for inactive users and send 2-minute warnings",
-    schedule="*/30 * * * * *",  # Every 30 seconds (cron format with seconds)
+    schedule="* * * * *",  # Every minute (standard cron format)
     time_zone="Africa/Johannesburg",
     attempt_deadline="60s",
     http_target=gcp.cloudscheduler.JobHttpTargetArgs(
