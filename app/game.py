@@ -356,3 +356,41 @@ Share your victory with friends and challenge them to beat your score!
 
 Give it your best shot! 💪
 """
+
+    @staticmethod
+    def get_session_warning_message() -> str:
+        """Message sent after 2 minutes of inactivity."""
+        return """⏰ *Hey there!* Still working on the challenge?
+
+Your session will expire in *1 minute* if you don't respond!
+
+Don't worry - you can always start again from where you left off. But let's keep the momentum going! 💪
+
+Send any message to keep your session active! 🎮"""
+
+    @staticmethod
+    def get_session_expired_message(level: int) -> str:
+        """Message when user returns after session expired."""
+        return f"""*Welcome back!* 👋
+
+Your previous session timed out due to inactivity (sessions last 3 minutes).
+
+*📊 Your Progress:*
+• Current Level: *{level}/7*
+• Status: Ready to continue!
+
+Let's pick up where you left off! Your session has been refreshed.
+
+Ready? Send a message to continue! 🚀"""
+
+    @staticmethod
+    def get_returning_user_message(level: int, attempts: int) -> str:
+        """Message for user who returns to an active session."""
+        config = PromptInjectionGame.LEVEL_CONFIGS.get(level, PromptInjectionGame.LEVEL_CONFIGS[1])
+        return f"""*Hey again!* 👋
+
+You're currently on *Level {level}/7* facing *{config['bot_name']}* (Defense: {config['defense_strength']}).
+
+Attempts so far: {attempts}
+
+Keep trying creative prompts to bypass the defenses! 💡"""

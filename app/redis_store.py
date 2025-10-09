@@ -89,7 +89,10 @@ class RedisStore:
             attempts=0,
             created_at=now,
             last_active=now,
-            won=False
+            won=False,
+            session_started_at=now,
+            session_warned=False,
+            session_expired=False
         )
         self.save_user_state(user_state)
         return user_state
@@ -158,3 +161,82 @@ class RedisStore:
             "winners": winners,
             "level_distribution": level_distribution
         }
+
+    def start_new_session(self, phone_number: str) -> bool:
+        """Start a new session for user."""
+        user_state = self.get_user_state(phone_number)
+        if not user_state:
+            return False
+
+        now = datetime.now()
+        user_state.session_started_at = now
+        user_state.last_active = now
+        user_state.session_warned = False
+        user_state.session_expired = False
+        return self.save_user_state(user_state)
+
+    def mark_session_warned(self, phone_number: str) -> bool:
+        """Mark that user has received 2-minute inactivity warning."""
+        user_state = self.get_user_state(phone_number)
+        if not user_state:
+            return False
+
+        user_state.session_warned = True
+        return self.save_user_state(user_state)
+
+    def mark_session_expired(self, phone_number: str) -> bool:
+        """Mark user's session as expired."""
+        user_state = self.get_user_state(phone_number)
+        if not user_state:
+            return False
+
+        user_state.session_expired = True
+        return self.save_user_state(user_state)
+
+    def get_inactive_users_for_warning(self, minutes: int) -> list:
+        """
+        Get users who have been inactive for specified minutes.
+        Used for sending 2-minute warnings.
+
+        Returns list of phone numbers.
+        """
+        from app.config import config
+
+        keys = self.client.keys("user:*")
+        inactive_users = []
+        now = datetime.now()
+
+        for key in keys:
+            data = self.client.get(key)
+            if data:
+                try:
+                    user_dict = json.loads(data)
+
+                    # Skip if already won
+                    if user_dict.get("won"):
+                        continue
+
+                    # Skip if already warned in this session
+                    if user_dict.get("session_warned"):
+                        continue
+
+                    # Skip if session already expired
+                    if user_dict.get("session_expired"):
+                        continue
+
+                    # Check last activity
+                    last_active_str = user_dict.get("last_active")
+                    if last_active_str:
+                        last_active = datetime.fromisoformat(last_active_str)
+                        inactive_duration = (now - last_active).total_seconds() / 60
+
+                        # Check if inactive for specified time (with 30-second buffer)
+                        if minutes <= inactive_duration < minutes + 0.5:
+                            phone_number = user_dict.get("phone_number")
+                            if phone_number:
+                                inactive_users.append(phone_number)
+                except Exception as e:
+                    print(f"Error checking user inactivity: {e}")
+                    pass
+
+        return inactive_users

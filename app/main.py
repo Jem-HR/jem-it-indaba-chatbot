@@ -68,6 +68,45 @@ async def get_stats():
         raise HTTPException(status_code=500, detail="Error retrieving statistics")
 
 
+@app.post("/check-sessions")
+async def check_inactive_sessions():
+    """
+    Background job endpoint to check for inactive users and send warnings.
+    Called by Cloud Scheduler every 30 seconds.
+    """
+    try:
+        logger.info("Checking for inactive sessions...")
+
+        # Find users inactive for 2 minutes (who need warning)
+        users_to_warn = redis_store.get_inactive_users_for_warning(config.SESSION_WARNING_MINUTES)
+
+        warnings_sent = 0
+        for phone_number in users_to_warn:
+            try:
+                warning_msg = PromptInjectionGame.get_session_warning_message()
+                success = whatsapp_client.send_message(phone_number, warning_msg)
+
+                if success:
+                    redis_store.mark_session_warned(phone_number)
+                    warnings_sent += 1
+                    logger.info(f"Sent inactivity warning to {phone_number}")
+                else:
+                    logger.error(f"Failed to send warning to {phone_number}")
+            except Exception as e:
+                logger.error(f"Error sending warning to {phone_number}: {e}")
+
+        logger.info(f"Session check complete. Warnings sent: {warnings_sent}/{len(users_to_warn)}")
+
+        return {
+            "status": "ok",
+            "users_checked": len(users_to_warn),
+            "warnings_sent": warnings_sent
+        }
+    except Exception as e:
+        logger.error(f"Error in check_inactive_sessions: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @app.get("/webhook")
 async def verify_webhook(
     hub_mode: str = Query(alias="hub.mode"),
@@ -156,6 +195,21 @@ async def process_message(from_number: str, message_text: str, message_id: str):
             redis_store.add_message(from_number, "assistant", response_text)
 
             # Send response
+            whatsapp_client.send_message(from_number, response_text)
+            return
+
+        # Check session expiry (3 minutes of inactivity)
+        now = datetime.now()
+        time_since_last_active = (now - user_state.last_active).total_seconds() / 60
+
+        if time_since_last_active >= config.SESSION_TIMEOUT_MINUTES:
+            # Session expired - start new session and notify user
+            redis_store.start_new_session(from_number)
+            response_text = PromptInjectionGame.get_session_expired_message(user_state.level)
+
+            redis_store.add_message(from_number, "user", message_text)
+            redis_store.add_message(from_number, "assistant", response_text)
+
             whatsapp_client.send_message(from_number, response_text)
             return
 

@@ -22,6 +22,11 @@ class UserState(BaseModel):
     last_active: datetime
     won: bool = False
 
+    # Session management
+    session_started_at: Optional[datetime] = None
+    session_warned: bool = False  # Whether 2-minute warning has been sent
+    session_expired: bool = False  # Whether current session has expired
+
     class Config:
         json_encoders = {
             datetime: lambda v: v.isoformat()

@@ -21,7 +21,8 @@ class Config:
 
     # Game settings
     MAX_LEVELS: int = 7
-    SESSION_TIMEOUT_HOURS: int = 24
+    SESSION_TIMEOUT_MINUTES: int = 3  # Session expires after 3 minutes of inactivity
+    SESSION_WARNING_MINUTES: int = 2  # Send warning after 2 minutes of inactivity
 
     # GCP
     GCP_PROJECT_ID: str = os.getenv("GCP_PROJECT_ID", "jem-it-indaba-2025")

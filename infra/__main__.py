@@ -19,6 +19,7 @@ apis_to_enable = [
     "servicenetworking.googleapis.com",
     "cloudbuild.googleapis.com",
     "containerregistry.googleapis.com",
+    "cloudscheduler.googleapis.com",
 ]
 
 enabled_apis = []
@@ -108,14 +109,6 @@ secret_accessor_binding = gcp.projects.IAMMember(
     member=service_account.email.apply(lambda email: f"serviceAccount:{email}"),
 )
 
-# Grant Cloud Run invoker role (for public access)
-cloudrun_invoker_binding = gcp.projects.IAMMember(
-    "sa-cloudrun-invoker",
-    project=project,
-    role="roles/run.invoker",
-    member="allUsers",
-)
-
 # Get project number for Cloud Build service account
 project_info = gcp.organizations.get_project()
 
@@ -170,25 +163,10 @@ whatsapp_verify_token_secret = gcp.secretmanager.Secret(
     ),
 )
 
-# Create default secret versions (empty - must be updated with actual values)
-# Note: In production, you would set these via CLI after infrastructure is created
-whatsapp_token_version = gcp.secretmanager.SecretVersion(
-    "whatsapp-api-token-v1",
-    secret=whatsapp_token_secret.id,
-    secret_data="PLACEHOLDER_UPDATE_ME",
-)
-
-whatsapp_phone_id_version = gcp.secretmanager.SecretVersion(
-    "whatsapp-phone-number-id-v1",
-    secret=whatsapp_phone_id_secret.id,
-    secret_data="PLACEHOLDER_UPDATE_ME",
-)
-
-whatsapp_verify_token_version = gcp.secretmanager.SecretVersion(
-    "whatsapp-verify-token-v1",
-    secret=whatsapp_verify_token_secret.id,
-    secret_data="challenge_token_2025",
-)
+# NOTE: Secret versions are NOT managed by Pulumi
+# This keeps secret values out of Pulumi state and only in GCP Secret Manager
+# Add secret values after deployment using:
+# echo -n 'YOUR_VALUE' | gcloud secrets versions add SECRET_NAME --data-file=-
 
 # Build and push Docker image using Cloud Build (not local Docker)
 # Cloud Build will handle building and pushing to GCR
@@ -272,9 +250,9 @@ cloudrun_service = gcp.cloudrunv2.Service(
     opts=pulumi.ResourceOptions(depends_on=[
         vpc_connector,
         redis_instance,
-        whatsapp_token_version,
-        whatsapp_phone_id_version,
-        whatsapp_verify_token_version,
+        whatsapp_token_secret,
+        whatsapp_phone_id_secret,
+        whatsapp_verify_token_secret,
         secret_accessor_binding,
     ])
 )
@@ -288,12 +266,40 @@ cloudrun_iam_member = gcp.cloudrunv2.ServiceIamMember(
     member="allUsers",
 )
 
+# Create Cloud Scheduler job for session inactivity warnings
+# This job runs every 30 seconds to check for inactive users
+scheduler_job = gcp.cloudscheduler.Job(
+    "session-checker",
+    name="session-inactivity-checker",
+    description="Check for inactive users and send 2-minute warnings",
+    schedule="*/30 * * * * *",  # Every 30 seconds (cron format with seconds)
+    time_zone="Africa/Johannesburg",
+    attempt_deadline="60s",
+    http_target=gcp.cloudscheduler.JobHttpTargetArgs(
+        http_method="POST",
+        uri=pulumi.Output.concat(cloudrun_service.uri, "/check-sessions"),
+        oidc_token=gcp.cloudscheduler.JobHttpTargetOidcTokenArgs(
+            service_account_email=service_account.email,
+        ),
+    ),
+    opts=pulumi.ResourceOptions(depends_on=[cloudrun_service, service_account])
+)
+
+# Grant Cloud Scheduler permission to invoke Cloud Run
+scheduler_invoker = gcp.cloudrunv2.ServiceIamMember(
+    "scheduler-invoker",
+    name=cloudrun_service.name,
+    location=region,
+    role="roles/run.invoker",
+    member=service_account.email.apply(lambda email: f"serviceAccount:{email}"),
+)
+
 # Export outputs
 pulumi.export("vpc_network_name", vpc_network.name)
 pulumi.export("vpc_network_id", vpc_network.id)
 pulumi.export("redis_host", redis_instance.host)
 pulumi.export("redis_port", redis_instance.port)
-pulumi.export("redis_connection", pulumi.Output.concat(redis_instance.host, ":", redis_instance.port))
+pulumi.export("redis_connection", pulumi.Output.all(redis_instance.host, redis_instance.port).apply(lambda args: f"{args[0]}:{args[1]}"))
 pulumi.export("cloudrun_url", cloudrun_service.uri)
 pulumi.export("webhook_url", pulumi.Output.concat(cloudrun_service.uri, "/webhook"))
 pulumi.export("service_account_email", service_account.email)
@@ -302,11 +308,12 @@ pulumi.export("vpc_connector_name", vpc_connector.name)
 # Export instructions
 pulumi.export("instructions", pulumi.Output.concat(
     "\n\n=== SETUP INSTRUCTIONS ===\n\n",
-    "1. Build and deploy with Cloud Build:\n",
+    "1. Add WhatsApp secrets (REQUIRED - Cloud Run won't start without these):\n",
+    f"   echo -n 'YOUR_WHATSAPP_TOKEN' | gcloud secrets versions add whatsapp-api-token --data-file=- --project={project}\n",
+    f"   echo -n 'YOUR_PHONE_NUMBER_ID' | gcloud secrets versions add whatsapp-phone-number-id --data-file=- --project={project}\n",
+    f"   echo -n 'challenge_token_2025' | gcloud secrets versions add whatsapp-verify-token --data-file=- --project={project}\n\n",
+    "2. Build and deploy with Cloud Build:\n",
     f"   gcloud builds submit --config cloudbuild.yaml --project={project}\n\n",
-    "2. Update WhatsApp secrets:\n",
-    f"   echo -n 'YOUR_TOKEN' | gcloud secrets versions add whatsapp-api-token --data-file=- --project={project}\n",
-    f"   echo -n 'YOUR_PHONE_ID' | gcloud secrets versions add whatsapp-phone-number-id --data-file=- --project={project}\n\n",
     "3. Configure WhatsApp webhook:\n",
     "   URL: ", cloudrun_service.uri, "/webhook\n",
     "   Verify Token: challenge_token_2025\n\n",
