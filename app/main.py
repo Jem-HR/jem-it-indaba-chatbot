@@ -73,13 +73,18 @@ async def get_stats():
 async def check_inactive_sessions():
     """
     Background job endpoint to check for inactive users and send warnings.
-    Called by Cloud Scheduler every 30 seconds.
+    Called by Cloud Scheduler every minute.
     """
     try:
         logger.info("Checking for inactive sessions...")
 
+        # Get all user keys for debugging
+        all_keys = redis_store.client.keys("user:*")
+        logger.info(f"Total users in Redis: {len(all_keys)}")
+
         # Find users inactive for 2 minutes (who need warning)
         users_to_warn = redis_store.get_inactive_users_for_warning(config.SESSION_WARNING_MINUTES)
+        logger.info(f"Users needing warning: {len(users_to_warn)}")
 
         warnings_sent = 0
         for phone_number in users_to_warn:
@@ -90,16 +95,17 @@ async def check_inactive_sessions():
                 if success:
                     redis_store.mark_session_warned(phone_number)
                     warnings_sent += 1
-                    logger.info(f"Sent inactivity warning to {phone_number}")
+                    logger.info(f"✅ Sent inactivity warning to {phone_number}")
                 else:
-                    logger.error(f"Failed to send warning to {phone_number}")
+                    logger.error(f"❌ Failed to send warning to {phone_number}")
             except Exception as e:
-                logger.error(f"Error sending warning to {phone_number}: {e}")
+                logger.error(f"❌ Error sending warning to {phone_number}: {e}")
 
         logger.info(f"Session check complete. Warnings sent: {warnings_sent}/{len(users_to_warn)}")
 
         return {
             "status": "ok",
+            "total_users": len(all_keys),
             "users_checked": len(users_to_warn),
             "warnings_sent": warnings_sent
         }

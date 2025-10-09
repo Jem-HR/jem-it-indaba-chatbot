@@ -105,14 +105,19 @@ class RedisStore:
         if not user_state:
             user_state = self.create_new_user(phone_number)
 
+        now = datetime.now()
         message = Message(
             role=role,
             content=content,
-            timestamp=datetime.now()
+            timestamp=now
         )
         user_state.messages.append(message)
-        user_state.last_active = datetime.now()
+        user_state.last_active = now
         user_state.attempts += 1 if role == "user" else 0
+
+        # Initialize session fields if missing (for existing users)
+        if user_state.session_started_at is None:
+            user_state.session_started_at = now
 
         # Reset session warning flag when user sends a message
         if role == "user":
@@ -212,22 +217,28 @@ class RedisStore:
         inactive_users = []
         now = datetime.now()
 
+        print(f"DEBUG: Checking {len(keys)} users for {minutes}-minute inactivity")
+
         for key in keys:
             data = self.client.get(key)
             if data:
                 try:
                     user_dict = json.loads(data)
+                    phone = user_dict.get("phone_number", "unknown")
 
                     # Skip if already won
                     if user_dict.get("won"):
+                        print(f"DEBUG: {phone} - skipped (won)")
                         continue
 
                     # Skip if already warned in this session
                     if user_dict.get("session_warned"):
+                        print(f"DEBUG: {phone} - skipped (already warned)")
                         continue
 
                     # Skip if session already expired
                     if user_dict.get("session_expired"):
+                        print(f"DEBUG: {phone} - skipped (session expired)")
                         continue
 
                     # Check last activity
@@ -236,13 +247,20 @@ class RedisStore:
                         last_active = datetime.fromisoformat(last_active_str)
                         inactive_duration = (now - last_active).total_seconds() / 60
 
-                        # Check if inactive for specified time (with 30-second buffer)
-                        if minutes <= inactive_duration < minutes + 0.5:
+                        print(f"DEBUG: {phone} - inactive for {inactive_duration:.1f} minutes")
+
+                        # Check if inactive >= 2 minutes and < 3 minutes (full 1-minute window)
+                        # This catches users between warning time and expiry time
+                        if minutes <= inactive_duration < config.SESSION_TIMEOUT_MINUTES:
                             phone_number = user_dict.get("phone_number")
                             if phone_number:
+                                print(f"DEBUG: {phone} - WILL WARN (inactive {inactive_duration:.1f} min)")
                                 inactive_users.append(phone_number)
+                        else:
+                            print(f"DEBUG: {phone} - outside warning window ({minutes}-{config.SESSION_TIMEOUT_MINUTES} min)")
                 except Exception as e:
                     print(f"Error checking user inactivity: {e}")
                     pass
 
+        print(f"DEBUG: Found {len(inactive_users)} users needing warnings")
         return inactive_users

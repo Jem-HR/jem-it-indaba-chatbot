@@ -77,7 +77,7 @@ class WhatsAppClient:
 
         button_components = [
             {
-                "type": "button",
+                "type": "reply",
                 "reply": {
                     "id": button_id,
                     "title": button_text[:20]  # Max 20 chars for button text
