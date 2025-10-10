@@ -200,9 +200,10 @@ async def process_message(from_number: str, message_text: str, message_id: str, 
         is_new_user = user_state is None
 
         if is_new_user:
-            # New user - send welcome message
+            # New user - send welcome message with header image + buttons in ONE message
             user_state = redis_store.create_new_user(from_number)
             response_text = PromptInjectionGame.get_welcome_message()
+            buttons = PromptInjectionGame.get_session_expired_buttons()  # Same buttons for consistency
 
             # Track new user
             analytics.track_user_started_game(from_number)
@@ -210,8 +211,14 @@ async def process_message(from_number: str, message_text: str, message_id: str, 
             # Save welcome message to history
             redis_store.add_message(from_number, "assistant", response_text)
 
-            # Send response
-            whatsapp_client.send_message(from_number, response_text)
+            # Send with Opening message header image + buttons in single message
+            opening_header_url = "https://storage.googleapis.com/jem-it-indaba-assets/Opening message header.jpg"
+            whatsapp_client.send_interactive_buttons(
+                from_number,
+                response_text,
+                buttons,
+                header_image_url=opening_header_url
+            )
             return
 
         # Check session expiry (3 minutes of inactivity)
@@ -219,7 +226,7 @@ async def process_message(from_number: str, message_text: str, message_id: str, 
         time_since_last_active = (now - user_state.last_active).total_seconds() / 60
 
         if time_since_last_active >= config.SESSION_TIMEOUT_MINUTES:
-            # Session expired - start new session and notify user with logo + interactive buttons
+            # Session expired - send logo + text + buttons in ONE message
             redis_store.start_new_session(from_number)
             response_text = PromptInjectionGame.get_session_expired_message(user_state.level)
             buttons = PromptInjectionGame.get_session_expired_buttons()
@@ -231,11 +238,13 @@ async def process_message(from_number: str, message_text: str, message_id: str, 
             redis_store.add_message(from_number, "user", message_text)
             redis_store.add_message(from_number, "assistant", f"[Logo + Interactive Message] {response_text}")
 
-            # Send logo image with caption
-            whatsapp_client.send_image_message(from_number, config.JEM_LOGO_URL, response_text)
-
-            # Then send interactive buttons as follow-up
-            whatsapp_client.send_interactive_buttons(from_number, "What would you like to do?", buttons)
+            # Send logo image header + text + buttons in SINGLE message
+            whatsapp_client.send_interactive_buttons(
+                from_number,
+                response_text,
+                buttons,
+                header_image_url=config.JEM_LOGO_URL
+            )
             return
 
         # Handle button clicks
@@ -250,13 +259,8 @@ async def process_message(from_number: str, message_text: str, message_id: str, 
                 whatsapp_client.send_message(from_number, response_text)
                 return
 
-            elif button_id == "my_progress":
-                analytics.track_progress_checked(from_number, user_state.level, user_state.attempts)
-                response_text = PromptInjectionGame.get_my_progress_message(
-                    user_state.level,
-                    user_state.attempts,
-                    user_state.won
-                )
+            elif button_id == "about_jem":
+                response_text = PromptInjectionGame.get_about_jem_message()
                 redis_store.add_message(from_number, "assistant", response_text)
                 whatsapp_client.send_message(from_number, response_text)
                 return

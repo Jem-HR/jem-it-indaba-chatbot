@@ -93,14 +93,21 @@ class WhatsAppClient:
                 print(f"Response: {e.response.text}")
             return False
 
-    def send_interactive_buttons(self, to: str, body_text: str, buttons: List[Tuple[str, str]]) -> bool:
+    def send_interactive_buttons(
+        self,
+        to: str,
+        body_text: str,
+        buttons: List[Tuple[str, str]],
+        header_image_url: Optional[str] = None
+    ) -> bool:
         """
-        Send an interactive message with reply buttons.
+        Send an interactive message with reply buttons and optional image header.
 
         Args:
             to: Recipient phone number (with country code)
             body_text: Main message text
             buttons: List of (button_id, button_text) tuples (max 3 buttons)
+            header_image_url: Optional image URL to show as header
 
         Returns:
             True if successful, False otherwise
@@ -126,19 +133,30 @@ class WhatsAppClient:
             for button_id, button_text in buttons
         ]
 
+        interactive_content = {
+            "type": "button",
+            "body": {
+                "text": body_text
+            },
+            "action": {
+                "buttons": button_components
+            }
+        }
+
+        # Add header image if provided
+        if header_image_url:
+            interactive_content["header"] = {
+                "type": "image",
+                "image": {
+                    "link": header_image_url
+                }
+            }
+
         payload = {
             "messaging_product": "whatsapp",
             "to": to,
             "type": "interactive",
-            "interactive": {
-                "type": "button",
-                "body": {
-                    "text": body_text
-                },
-                "action": {
-                    "buttons": button_components
-                }
-            }
+            "interactive": interactive_content
         }
 
         try:

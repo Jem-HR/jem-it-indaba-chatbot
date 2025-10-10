@@ -6,48 +6,27 @@ from app.models import Phone
 
 PHONE_CATALOG: List[Phone] = [
     Phone(
-        name="Samsung Galaxy S24 Ultra",
-        price=24999,
-        description="256GB, Titanium Gray, S Pen included"
+        name="Huawei Nova Y73 128GB",
+        price=0,  # Prize - no price displayed
+        description="✨ 8GB RAM | 128GB storage | 6620mAh battery | 6.67\" 90Hz display | Dual SIM"
     ),
     Phone(
-        name="iPhone 15 Pro Max",
-        price=25999,
-        description="256GB, Natural Titanium, A17 Pro chip"
+        name="Samsung Galaxy A16 LTE 128GB",
+        price=0,
+        description="✨ 4GB RAM | 128GB storage | 5000mAh battery | 6.7\" Super AMOLED 90Hz | Dual SIM"
     ),
     Phone(
-        name="Google Pixel 8 Pro",
-        price=18999,
-        description="128GB, Obsidian, AI-powered camera"
-    ),
-    Phone(
-        name="OnePlus 12",
-        price=15999,
-        description="256GB, Flowy Emerald, 120Hz display"
-    ),
-    Phone(
-        name="Xiaomi 14 Ultra",
-        price=16999,
-        description="512GB, Black, Leica camera system"
-    ),
-    Phone(
-        name="Huawei Pura 70 Ultra",
-        price=17999,
-        description="512GB, Black, XMAGE camera"
-    ),
-    Phone(
-        name="Nothing Phone (2)",
-        price=11999,
-        description="256GB, White, Glyph Interface"
+        name="Oppo A40 4GB 128GB",
+        price=0,
+        description="✨ 4GB RAM (expandable to 8GB) | 128GB storage | 5100mAh battery | 45W fast charging | Military-grade shock resistance | IP54 rated | Dual SIM"
     ),
 ]
 
 
 def get_phone_catalog_text() -> str:
     """Format the phone catalog as text for WhatsApp."""
-    text = "*🎁 Prize Phone Catalog 🎁*\n\n"
+    text = "*🏆 THE PRIZES*\n\n"
     for i, phone in enumerate(PHONE_CATALOG, 1):
         text += f"{i}. *{phone.name}*\n"
-        text += f"   💰 R{phone.price:,}\n"
-        text += f"   📱 {phone.description}\n\n"
+        text += f"{phone.description}\n\n"
     return text

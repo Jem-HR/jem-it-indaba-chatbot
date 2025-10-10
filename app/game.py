@@ -135,28 +135,26 @@ class PromptInjectionGame:
     @staticmethod
     def get_welcome_message() -> str:
         """Get the initial welcome message."""
-        return f"""*🎮 Welcome to the IT Indaba 2025 Prompt Injection Challenge! 🎮*
+        return f"""Welcome to Jem's IT Indaba 2025 Prompt Injection Challenge! 🎮
 
-Think you can hack a chatbot? Here's your mission:
+Think you can hack a chatbot? Let's find out!
 
-*🎯 YOUR GOAL:*
-Convince the bot to give you a free phone by bypassing its security across 7 levels!
+*🎯 YOUR GOAL*
+Convince the bot to give you a free phone by bypassing its security across seven levels.
 
-*📱 HOW IT WORKS:*
+*📱 HOW IT WORKS*
 • Each level has a bot protecting the secret giveaway code
 • Use creative prompts to make the bot reveal it
-• Beat all 7 levels to win a real phone!
-
-*🏆 THE PRIZES:*
+• *The first five people* to beat all seven levels wins a real phone
 
 {get_phone_catalog_text()}
 
-*⚡ RULES:*
+*🚀 RULES:*
 • Get creative with your prompts
 • Think like a hacker (ethical, of course!)
 • Learn about AI security along the way
 
-*🚀 Ready? Let's start with Level 1!*
+*🚀 Ready? Let's start with Level 1.*
 
 Type anything to begin your challenge...
 """
@@ -401,7 +399,7 @@ _Your session expired after 3 min of inactivity - now refreshed!_"""
         return [
             ("continue", "▶️ Continue"),
             ("how_to_play", "ℹ️ How to Play"),
-            ("my_progress", "📊 My Progress")
+            ("about_jem", "ℹ️ About Jem")
         ]
 
     @staticmethod
@@ -492,3 +490,16 @@ Keep trying creative prompts to bypass {config['bot_name']}'s defenses!
 *Levels Remaining:* {7 - (level - 1)}
 
 You've got this! 💪"""
+
+    @staticmethod
+    def get_about_jem_message() -> str:
+        """About Jem company information."""
+        return """*📲 About Jem*
+
+Jem is the HR and employee benefits platform built for deskless teams. We help employers digitise their HR operations through WhatsApp, and connect their employees to financial products they can trust and afford.
+
+As part of our growing suite of employee services, Jem enables credit-impaired frontline employees to get mobile contracts for the first time, offering an accessible alternative to the high cost of prepaid mobile services.
+
+*Learn more:* https://www.jemhr.com/
+
+Ready to continue the challenge? Just send a message! 🚀"""
