@@ -212,12 +212,11 @@ async def process_message(from_number: str, message_text: str, message_id: str, 
             redis_store.add_message(from_number, "assistant", response_text)
 
             # Send with Opening message header image + buttons in single message
-            opening_header_url = "https://storage.googleapis.com/jem-it-indaba-assets/Opening message header.jpg"
             whatsapp_client.send_interactive_buttons(
                 from_number,
                 response_text,
                 buttons,
-                header_image_url=opening_header_url
+                header_image_url=config.OPENING_HEADER_URL
             )
             return
 
