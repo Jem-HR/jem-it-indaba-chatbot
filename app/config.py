@@ -30,6 +30,7 @@ class Config:
 
     # Assets
     JEM_LOGO_URL: str = os.getenv("JEM_LOGO_URL", "https://storage.googleapis.com/jem-it-indaba-assets/jem-mobile-pp.jpg")
+    OPENING_HEADER_URL: str = os.getenv("OPENING_HEADER_URL", "https://storage.googleapis.com/jem-it-indaba-assets/Opening message header.jpg")
 
     # GCP
     GCP_PROJECT_ID: str = os.getenv("GCP_PROJECT_ID", "jem-it-indaba-2025")
