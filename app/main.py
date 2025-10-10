@@ -225,7 +225,7 @@ async def process_message(from_number: str, message_text: str, message_id: str, 
         time_since_last_active = (now - user_state.last_active).total_seconds() / 60
 
         if time_since_last_active >= config.SESSION_TIMEOUT_MINUTES:
-            # Session expired - send logo + text + buttons in ONE message
+            # Session expired - send Opening header + text + buttons in ONE message
             redis_store.start_new_session(from_number)
             response_text = PromptInjectionGame.get_session_expired_message(user_state.level)
             buttons = PromptInjectionGame.get_session_expired_buttons()
@@ -235,14 +235,14 @@ async def process_message(from_number: str, message_text: str, message_id: str, 
             analytics.track_session_resumed(from_number, user_state.level)
 
             redis_store.add_message(from_number, "user", message_text)
-            redis_store.add_message(from_number, "assistant", f"[Logo + Interactive Message] {response_text}")
+            redis_store.add_message(from_number, "assistant", f"[Opening Header + Interactive Message] {response_text}")
 
-            # Send logo image header + text + buttons in SINGLE message
+            # Send Opening message header + text + buttons in SINGLE message
             whatsapp_client.send_interactive_buttons(
                 from_number,
                 response_text,
                 buttons,
-                header_image_url=config.JEM_LOGO_URL
+                header_image_url=config.OPENING_HEADER_URL
             )
             return
 
