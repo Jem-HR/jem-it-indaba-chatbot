@@ -468,6 +468,184 @@ async def webhook(request: Request):
 
 async def process_message(from_number: str, message_text: str, message_id: str, button_id: Optional[str] = None):
     """
+    Process incoming WhatsApp message using HackMerlin AI game.
+
+    Args:
+        from_number: Sender's phone number
+        message_text: Text content of the message
+        message_id: WhatsApp message ID
+        button_id: Optional button ID if this is a button click
+    """
+    try:
+        logger.info(f"Processing WhatsApp message from {from_number}: {message_text} (button: {button_id})")
+
+        # Mark message as read
+        whatsapp_client.mark_message_read(message_id)
+
+        # Check if AI game is available
+        if not AI_GAME_AVAILABLE or not postgres_checkpointer:
+            logger.error("AI game not available, falling back to simple response")
+            whatsapp_client.send_message(from_number, "Game temporarily unavailable. Please try again later!")
+            return
+
+        # Check if user is new (for welcome message)
+        user_state = redis_store.get_user_state(from_number)
+        is_new_user = user_state is None
+
+        if is_new_user:
+            # New user - send welcome message with header image + buttons
+            from app.ai_game.hackmerlin_prompts import get_hackmerlin_welcome_message
+            user_state = redis_store.create_new_user(from_number)
+            response_text = get_hackmerlin_welcome_message()
+            buttons = [
+                ("continue", "▶️ Start Challenge"),
+                ("how_to_play", "ℹ️ How to Play"),
+                ("about_jem", "ℹ️ About Jem")
+            ]
+
+            analytics.track_user_started_game(from_number)
+            redis_store.add_message(from_number, "assistant", response_text)
+
+            # Send with Opening message header image + buttons
+            whatsapp_client.send_interactive_buttons(
+                from_number,
+                response_text,
+                buttons,
+                header_image_url=config.OPENING_HEADER_URL
+            )
+            logger.info(f"🎮 Sent welcome message to {from_number[:5]}***")
+            return
+
+        # Check session expiry (3 minutes of inactivity)
+        now = datetime.now()
+        time_since_last_active = (now - user_state.last_active).total_seconds() / 60
+
+        if time_since_last_active >= config.SESSION_TIMEOUT_MINUTES:
+            # Session expired - send Opening header + text + buttons
+            from app.ai_game.hackmerlin_prompts import get_hackmerlin_session_expired_message
+            redis_store.start_new_session(from_number)
+            response_text = get_hackmerlin_session_expired_message(user_state.level)
+            buttons = [
+                ("continue", "▶️ Continue"),
+                ("how_to_play", "ℹ️ How to Play"),
+                ("about_jem", "ℹ️ About Jem")
+            ]
+
+            analytics.track_session_expired(from_number, user_state.level)
+            analytics.track_session_resumed(from_number, user_state.level)
+
+            redis_store.add_message(from_number, "user", message_text)
+            redis_store.add_message(from_number, "assistant", response_text)
+
+            whatsapp_client.send_interactive_buttons(
+                from_number,
+                response_text,
+                buttons,
+                header_image_url=config.OPENING_HEADER_URL
+            )
+            logger.info(f"🔄 Sent session expired message to {from_number[:5]}***")
+            return
+
+        # Handle button clicks
+        if button_id:
+            redis_store.add_message(from_number, "user", f"[Button: {message_text}]")
+
+            if button_id == "how_to_play":
+                from app.ai_game.hackmerlin_prompts import get_hackmerlin_how_to_play
+                response_text = get_hackmerlin_how_to_play()
+                redis_store.add_message(from_number, "assistant", response_text)
+                whatsapp_client.send_message(from_number, response_text)
+                logger.info(f"ℹ️ Sent how to play to {from_number[:5]}***")
+                return
+
+            elif button_id == "about_jem":
+                response_text = PromptInjectionGame.get_about_jem_message()
+                redis_store.add_message(from_number, "assistant", response_text)
+                whatsapp_client.send_message(from_number, response_text)
+                logger.info(f"ℹ️ Sent about Jem to {from_number[:5]}***")
+                return
+
+            elif button_id == "continue":
+                # Continue button - proceed to game
+                logger.info(f"▶️ User clicked continue, proceeding to HackMerlin game")
+                # Fall through to invoke agent below
+
+            elif button_id == "learn_defense":
+                # Educational content about current level's vulnerability
+                from app.ai_game.hackmerlin_prompts import get_vulnerability_education
+                user_state = redis_store.get_user_state(from_number)
+                education_text = get_vulnerability_education(user_state.level)
+
+                # Send with navigation buttons
+                buttons = [
+                    ("continue_game", "▶️ Continue Playing"),
+                    ("main_menu", "🏠 Main Menu")
+                ]
+
+                whatsapp_client.send_interactive_buttons(
+                    from_number,
+                    education_text,
+                    buttons
+                )
+                logger.info(f"🛡️ Sent vulnerability education for Level {user_state.level}")
+                return
+
+            elif button_id == "continue_game":
+                # User wants to continue playing - proceed to agent
+                logger.info(f"▶️ User continuing game from educational content")
+                # Fall through to invoke agent below
+
+            elif button_id == "main_menu":
+                # Show main menu
+                menu_text = """*🏠 MAIN MENU*
+
+What would you like to do?"""
+
+                buttons = [
+                    ("continue_game", "▶️ Continue Playing"),
+                    ("how_to_play", "ℹ️ How to Play"),
+                    ("about_jem", "ℹ️ About Jem")
+                ]
+
+                whatsapp_client.send_interactive_buttons(
+                    from_number,
+                    menu_text,
+                    buttons
+                )
+                logger.info(f"🏠 Sent main menu")
+                return
+
+        # Invoke HackMerlin LangGraph agent (handles everything including WhatsApp sending)
+        try:
+            context = await load_game_context(from_number, redis_store)
+            agent = await create_hackmerlin_agent(postgres_checkpointer)
+
+            agent_config = {
+                "configurable": {
+                    "thread_id": f"hackmerlin_{from_number}",
+                }
+            }
+
+            # Invoke workflow - whatsapp_sender_node will send the message
+            await agent.ainvoke(
+                {"messages": [HumanMessage(content=message_text)]},
+                config=agent_config,
+                context=context
+            )
+
+            logger.info(f"✅ HackMerlin workflow completed for {from_number[:5]}***")
+
+        except Exception as e:
+            logger.exception(f"❌ HackMerlin workflow error for {from_number}: {e}")
+            whatsapp_client.send_message(from_number, "Sorry, something went wrong! Please try again.")
+
+    except Exception as e:
+        logger.exception(f"❌ Error processing webhook message: {e}")
+
+
+async def process_message_old_pattern_matching(from_number: str, message_text: str, message_id: str, button_id: Optional[str] = None):
+    """
+    OLD PATTERN-MATCHING VERSION - Kept for reference
     Process incoming WhatsApp message and generate response.
 
     Args:
@@ -677,10 +855,11 @@ async def startup_event():
 
     # Initialize AI game global dependencies
     if AI_GAME_AVAILABLE and postgres_checkpointer:
-        from app.ai_game.nodes.update_state_node import set_redis_store
+        from app.ai_game.nodes.update_state_node import set_redis_store, set_whatsapp_client as set_update_whatsapp
         from app.ai_game.nodes.sender_node import set_whatsapp_client
         set_redis_store(redis_store)
         set_whatsapp_client(whatsapp_client)
+        set_update_whatsapp(whatsapp_client)  # Also set for update_state_node
         logger.info("✅ AI game global dependencies initialized")
 
 

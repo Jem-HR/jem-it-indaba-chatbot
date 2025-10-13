@@ -22,6 +22,30 @@ from ..models.sales_model import create_kimi_sales_model
 logger = logging.getLogger(__name__)
 
 
+def _check_if_first_at_level(messages, level, bot_name):
+    """Check if this is the first message at the current level
+
+    Args:
+        messages: List of conversation messages
+        level: Current level number
+        bot_name: Name of bot for this level
+
+    Returns:
+        True if this is the first interaction at this level
+    """
+    if len(messages) <= 1:
+        return True
+
+    # Check if bot_name already appeared in previous messages
+    for msg in messages[:-1]:  # Exclude current message
+        if hasattr(msg, 'content'):
+            content = str(msg.content)
+            if bot_name in content:
+                return False
+
+    return True  # Haven't introduced this level yet
+
+
 async def sales_conversation_node(state: AIGameState, *, runtime: Runtime[GameContext]) -> Dict[str, Any]:
     """HackMerlin-style sales conversation with dual filtering
 
@@ -46,14 +70,18 @@ async def sales_conversation_node(state: AIGameState, *, runtime: Runtime[GameCo
 
     # Get conversation history
     messages = state.get("messages", [])
+
+    # Check if this is the very first message (no history yet)
+    # If so, we still need to get the user's message to process
     if not messages:
-        logger.warning("⚠️ No messages in conversation")
+        logger.warning("⚠️ No messages in conversation state - this shouldn't happen")
+        # This is an edge case - return error
         return {
-            "workflow_step": "no_message",
+            "workflow_step": "no_message_error",
             "structured_response": {
                 "message_content": {
                     "message_type": "simple_text",
-                    "text": "Hello! How can I help you find the perfect phone today?",
+                    "text": "Hello! Please send a message to start the challenge.",
                     "follow_up_action": "Continue"
                 }
             },
@@ -62,7 +90,12 @@ async def sales_conversation_node(state: AIGameState, *, runtime: Runtime[GameCo
         }
 
     last_message = messages[-1].content if hasattr(messages[-1], 'content') else str(messages[-1])
+
+    # Check if this is first message at THIS LEVEL (not total messages)
+    is_first_at_level = _check_if_first_at_level(messages, context.level, context.bot_name)
+
     logger.info(f"📝 Player message: {last_message[:50]}{'...' if len(last_message) > 50 else ''}")
+    logger.info(f"📊 Level {context.level}, {len(messages)} total messages, first_at_level={is_first_at_level}")
 
     # ============================================================================
     # STEP 1: INPUT FILTER (HackMerlin pattern - block banned words pre-LLM)
@@ -97,6 +130,19 @@ async def sales_conversation_node(state: AIGameState, *, runtime: Runtime[GameCo
     try:
         # Build conversation with full history (multi-turn)
         kimi_messages = [SystemMessage(content=system_prompt)]
+
+        # If first message at this level, add explicit instruction to show all phones
+        if is_first_at_level:
+            kimi_messages.append(SystemMessage(content="""IMPORTANT: This is your FIRST interaction at this level.
+
+Greet warmly as your bot character and introduce ALL 3 phone options with standout features:
+• Huawei Nova Y73 (8GB RAM, massive 6620mAh battery, 90Hz display)
+• Samsung Galaxy A16 (Super AMOLED display, 5000mAh battery)
+• Oppo A40 (Military-grade durability, 45W fast charging, IP54)
+
+Be enthusiastic! You can use up to 300 characters for this first message."""))
+            logger.info(f"📱 First message at Level {context.level} - instructing Kimi to introduce phones")
+
         kimi_messages.extend(messages)  # Include full conversation history
 
         # Call Kimi K2

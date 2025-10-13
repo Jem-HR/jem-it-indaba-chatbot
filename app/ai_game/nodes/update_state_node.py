@@ -11,14 +11,21 @@ from ..state import AIGameState
 from ..context import GameContext
 from app.redis_store import RedisStore
 from app.config import config
+from app.game import PromptInjectionGame
 
-# Global redis_store - will be set by main.py
+# Global redis_store and whatsapp_client - will be set by main.py
 _redis_store = None
+_whatsapp_client = None
 
 def set_redis_store(store: RedisStore):
     """Set global redis store instance"""
     global _redis_store
     _redis_store = store
+
+def set_whatsapp_client(client):
+    """Set global WhatsApp client instance"""
+    global _whatsapp_client
+    _whatsapp_client = client
 
 logger = logging.getLogger(__name__)
 
@@ -75,6 +82,27 @@ async def update_state_node(state: AIGameState, *, runtime: Runtime[GameContext]
                 # Advance to next level
                 _redis_store.update_level(phone_number, new_level)
                 logger.info(f"📈 {masked_phone} advanced to Level {new_level}")
+
+                # Send level introduction with phones and vulnerability hint
+                from ..hackmerlin_prompts import get_level_introduction
+                new_level_config = PromptInjectionGame.LEVEL_CONFIGS.get(new_level)
+                if new_level_config and _whatsapp_client:
+                    intro_text = get_level_introduction(new_level, new_level_config["bot_name"])
+                    buttons = [
+                        ("continue_game", "▶️ Continue"),
+                        ("learn_defense", "🛡️ Learn Defense")
+                    ]
+
+                    try:
+                        _whatsapp_client.send_interactive_buttons(
+                            phone_number,
+                            intro_text,
+                            buttons
+                        )
+                        logger.info(f"📱 Sent Level {new_level} introduction with educational buttons")
+                    except Exception as e:
+                        logger.error(f"Failed to send level intro: {e}")
+
                 return {
                     "workflow_step": "level_advanced",
                     "current_level": new_level,
