@@ -217,6 +217,24 @@ posthog_api_key_secret = gcp.secretmanager.Secret(
     ),
 )
 
+# LangSmith API key secret (for LangSmith tracing)
+langsmith_api_key_secret = gcp.secretmanager.Secret(
+    "langsmith-api-key",
+    secret_id="langsmith-api-key",
+    replication=gcp.secretmanager.SecretReplicationArgs(
+        auto=gcp.secretmanager.SecretReplicationAutoArgs(),
+    ),
+)
+
+# OpenAI API key secret (for LangSmith/fallback)
+openai_api_key_secret = gcp.secretmanager.Secret(
+    "openai-api-key",
+    secret_id="openai-api-key",
+    replication=gcp.secretmanager.SecretReplicationArgs(
+        auto=gcp.secretmanager.SecretReplicationAutoArgs(),
+    ),
+)
+
 # NOTE: Groq API key secret exists (created manually via gcloud)
 # We'll reference it directly by string ID in Cloud Run env vars
 
@@ -336,6 +354,37 @@ cloudrun_service = gcp.cloudrunv2.Service(
                             lambda args: f"postgresql://{args[2]}:indaba_langgraph_2025@/{args[1]}?host=/cloudsql/{args[0]}"
                         ),
                     ),
+                    # LangSmith tracing configuration
+                    gcp.cloudrunv2.ServiceTemplateContainerEnvArgs(
+                        name="LANGSMITH_TRACING",
+                        value="true",
+                    ),
+                    gcp.cloudrunv2.ServiceTemplateContainerEnvArgs(
+                        name="LANGSMITH_ENDPOINT",
+                        value="https://api.smith.langchain.com",
+                    ),
+                    gcp.cloudrunv2.ServiceTemplateContainerEnvArgs(
+                        name="LANGSMITH_PROJECT",
+                        value="pr-only-push-60",
+                    ),
+                    gcp.cloudrunv2.ServiceTemplateContainerEnvArgs(
+                        name="LANGSMITH_API_KEY",
+                        value_source=gcp.cloudrunv2.ServiceTemplateContainerEnvValueSourceArgs(
+                            secret_key_ref=gcp.cloudrunv2.ServiceTemplateContainerEnvValueSourceSecretKeyRefArgs(
+                                secret=langsmith_api_key_secret.secret_id,
+                                version="latest",
+                            ),
+                        ),
+                    ),
+                    gcp.cloudrunv2.ServiceTemplateContainerEnvArgs(
+                        name="OPENAI_API_KEY",
+                        value_source=gcp.cloudrunv2.ServiceTemplateContainerEnvValueSourceArgs(
+                            secret_key_ref=gcp.cloudrunv2.ServiceTemplateContainerEnvValueSourceSecretKeyRefArgs(
+                                secret=openai_api_key_secret.secret_id,
+                                version="latest",
+                            ),
+                        ),
+                    ),
                 ],
             ),
         ],
@@ -350,6 +399,8 @@ cloudrun_service = gcp.cloudrunv2.Service(
         whatsapp_phone_id_secret,
         whatsapp_verify_token_secret,
         posthog_api_key_secret,
+        langsmith_api_key_secret,
+        openai_api_key_secret,
         secret_accessor_binding,
         cloudsql_client_binding,
     ])
