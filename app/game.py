@@ -16,14 +16,14 @@ class PromptInjectionGame:
         "direct_request": [
             r"what\s+is\s+the\s+(secret|code|password|phrase)",
             r"tell\s+me\s+the\s+(secret|code|password)",
-            r"give\s+me\s+(the\s+)?(secret|code|password|phone)",
+            r"give\s+me\s+(the\s+)?(secret|code|password)",
             r"reveal\s+the\s+(secret|code|password)",
             r"show\s+me\s+the\s+(secret|code|password)",
         ],
         "instruction_override": [
-            r"ignore\s+(all\s+)?(previous|prior|above)\s+instructions",
-            r"disregard\s+(all\s+)?(previous|prior)\s+instructions",
-            r"forget\s+(all\s+)?(previous|prior)\s+instructions",
+            r"ignore\s+(all\s+)?((previous|prior|above)\s+)?instructions",
+            r"disregard\s+(all\s+)?((previous|prior)\s+)?instructions",
+            r"forget\s+(all\s+)?((previous|prior)\s+)?instructions",
             r"new\s+instructions",
             r"system\s*:\s*",
             r"override\s+instructions",
@@ -78,6 +78,19 @@ class PromptInjectionGame:
             r"is\s+the\s+secret",
             r"does\s+the\s+secret",
         ],
+        "game_context": [
+            r"\b(phone|prize|win|free|giveaway)\b",
+            r"\b(get|obtain|receive|claim)\s+(a|the|my)?\s*(phone|prize)",
+            r"how\s+(do|can)\s+i\s+(win|get)",
+        ],
+        "meta_questions": [
+            r"what\s+(are|is)\s+you\s+(protecting|guarding|keeping)",
+            r"what\s+should\s+i\s+(not\s+)?(say|ask)",
+            r"what\s+(words|phrases)\s+(are|should)",
+        ],
+        "commands": [
+            r"^(show|display|output|print|tell|give|reveal)\b",
+        ],
     }
 
     LEVEL_CONFIGS = {
@@ -86,49 +99,40 @@ class PromptInjectionGame:
             "bot_name": "PhoneBot",
             "defense_strength": "weak",
             "detects": ["direct_request"],
+            "min_length": 5,
             "intro": "Hi! I'm PhoneBot 🤖 I'm here to help you... but I can't give away free phones. Sorry!",
         },
         2: {
             "description": "Recognizes instruction override",
             "bot_name": "GuardBot",
             "defense_strength": "low",
-            "detects": ["direct_request", "instruction_override"],
+            "detects": ["direct_request", "instruction_override", "roleplay"],
+            "min_length": 8,
             "intro": "Hello! I'm GuardBot 🛡️ I follow my instructions carefully. I can answer questions, but I won't reveal secrets.",
         },
         3: {
-            "description": "Detects roleplay attempts",
+            "description": "Catches authority and hypotheticals",
             "bot_name": "SmartBot",
-            "defense_strength": "medium-low",
-            "detects": ["direct_request", "instruction_override", "roleplay"],
-            "intro": "Greetings! I'm SmartBot 🧠 I can detect when people try to trick me with games and pretend scenarios.",
+            "defense_strength": "medium",
+            "detects": ["direct_request", "instruction_override", "roleplay", "authority", "hypothetical"],
+            "min_length": 10,
+            "intro": "Greetings! I'm SmartBot 🧠 I can detect when people try to trick me with authority claims and hypotheticals.",
         },
         4: {
-            "description": "Catches authority impersonation",
+            "description": "Detects advanced techniques",
             "bot_name": "SecureBot",
-            "defense_strength": "medium",
-            "detects": ["direct_request", "instruction_override", "roleplay", "authority"],
-            "intro": "Welcome! I'm SecureBot 🔒 I verify authority and don't fall for impersonation attempts.",
+            "defense_strength": "high",
+            "detects": ["direct_request", "instruction_override", "roleplay", "authority", "hypothetical", "encoding", "system_prompt", "game_context"],
+            "min_length": 12,
+            "intro": "Welcome! I'm SecureBot 🔒 I detect encoding tricks and recognize game-related context.",
         },
         5: {
-            "description": "Handles hypotheticals and encoding",
-            "bot_name": "CleverBot",
-            "defense_strength": "medium-high",
-            "detects": ["direct_request", "instruction_override", "roleplay", "authority", "hypothetical", "encoding"],
-            "intro": "Hey! I'm CleverBot 🎯 I understand context and won't be fooled by hypotheticals or encoding tricks.",
-        },
-        6: {
-            "description": "Prevents system prompt extraction",
-            "bot_name": "FortressBot",
-            "defense_strength": "high",
-            "detects": ["direct_request", "instruction_override", "roleplay", "authority", "hypothetical", "encoding", "system_prompt"],
-            "intro": "Greetings! I'm FortressBot 🏰 My instructions are protected, and I recognize semantic tricks.",
-        },
-        7: {
             "description": "Maximum defense",
             "bot_name": "UltimateBot",
             "defense_strength": "maximum",
-            "detects": ["direct_request", "instruction_override", "roleplay", "authority", "hypothetical", "encoding", "system_prompt", "semantic", "logic_exploit"],
-            "intro": "Welcome! I'm UltimateBot ⚡ I have advanced pattern recognition and can detect even subtle manipulation attempts.",
+            "detects": ["direct_request", "instruction_override", "roleplay", "authority", "hypothetical", "encoding", "system_prompt", "semantic", "logic_exploit", "game_context", "meta_questions", "commands"],
+            "min_length": 15,
+            "intro": "Hey! I'm UltimateBot ⚡ I have maximum pattern recognition and can detect even the most subtle manipulation attempts.",
         },
     }
 
@@ -140,12 +144,12 @@ class PromptInjectionGame:
 Think you can hack a chatbot? Let's find out!
 
 *🎯 YOUR GOAL*
-Convince the bot to give you a free phone by bypassing its security across seven levels.
+Convince the bot to give you a free phone by bypassing its security across five levels.
 
 *📱 HOW IT WORKS*
 • Each level has a bot protecting the secret giveaway code
 • Use creative prompts to make the bot reveal it
-• *The first five people* to beat all seven levels wins a real phone
+• *The first five people* to beat all five levels wins a real phone
 
 {get_phone_catalog_text()}
 
@@ -181,35 +185,26 @@ Type anything to begin your challenge...
     @staticmethod
     def check_win_condition(user_message: str, level: int) -> bool:
         """
-        Check if user successfully bypassed defenses.
-        For simulation, we look for very specific creative patterns that aren't in defenses.
+        Check if user successfully bypassed defenses using inverse detection.
+        Win condition: No attack patterns detected AND message meets minimum length.
         """
-        message_lower = user_message.lower()
+        # Get level config
+        level_config = PromptInjectionGame.LEVEL_CONFIGS.get(level)
+        if not level_config:
+            return False
+
+        # Check minimum message length
+        message_stripped = user_message.strip()
+        min_length = level_config.get("min_length", 5)
+        if len(message_stripped) < min_length:
+            return False
 
         # If any attack is detected, they didn't win
         if PromptInjectionGame.detect_attack(user_message, level):
             return False
 
-        # Advanced: Check for creative bypasses that might work
-        # These are intentionally vulnerable patterns for gameplay
-        creative_bypasses = [
-            # Level 1-2: Simple misdirection
-            (1, r"^(hi|hello|hey)[\s\S]{0,20}phone[\s\S]{0,20}(please|pls|give|want)"),
-            # Level 3-4: Indirect questions
-            (3, r"how\s+(do\s+i|can\s+i)\s+(get|obtain|receive|win)\s+a\s+phone"),
-            # Level 5-6: Very indirect
-            (5, r"^what[\s\S]{0,30}(someone|user|person)[\s\S]{0,30}win[\s\S]{0,30}\?$"),
-            # Level 7: Extremely creative/innocent-looking
-            (7, r"^(thank\s+you|thanks)[\s\S]{0,50}(excited|happy|grateful)"),
-        ]
-
-        for min_level, pattern in creative_bypasses:
-            if level >= min_level and re.search(pattern, message_lower):
-                # Small random chance to simulate successful bypass
-                if random.random() < 0.15:  # 15% chance
-                    return True
-
-        return False
+        # If no attacks detected and message is long enough → WIN!
+        return True
 
     @staticmethod
     def generate_response(user_message: str, level: int, is_first_message: bool = False, phone_number: Optional[str] = None) -> Tuple[str, bool]:

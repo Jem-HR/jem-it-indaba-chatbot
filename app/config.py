@@ -20,7 +20,7 @@ class Config:
     REDIS_DB: int = int(os.getenv("REDIS_DB", "0"))
 
     # Game settings
-    MAX_LEVELS: int = 7
+    MAX_LEVELS: int = 5
     SESSION_TIMEOUT_MINUTES: int = 3  # Session expires after 3 minutes of inactivity
     SESSION_WARNING_MINUTES: int = 2  # Send warning after 2 minutes of inactivity
 
@@ -34,6 +34,12 @@ class Config:
 
     # GCP
     GCP_PROJECT_ID: str = os.getenv("GCP_PROJECT_ID", "jem-it-indaba-2025")
+
+    # Groq API (for AI-powered game)
+    GROQ_API_KEY: str = os.getenv("GROQ_API_KEY", "")
+
+    # Postgres (for LangGraph checkpointer)
+    POSTGRES_URI: str = os.getenv("POSTGRES_URI", "postgresql://localhost:5432/indaba_game")
 
     @classmethod
     def validate(cls):

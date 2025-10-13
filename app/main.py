@@ -12,9 +12,24 @@ from app.redis_store import RedisStore
 from app.game import PromptInjectionGame
 from app import analytics
 
-# Configure logging
+# Configure logging FIRST (before any logging calls)
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+# AI Game imports (LangGraph + Kimi K2)
+AI_GAME_AVAILABLE = False
+try:
+    from langchain_core.messages import HumanMessage
+    from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
+    from psycopg_pool import AsyncConnectionPool
+    from psycopg.rows import dict_row
+    from app.ai_game.workflow import create_ai_game_agent
+    from app.ai_game.workflow_hackmerlin import create_hackmerlin_agent
+    from app.ai_game.context import load_game_context
+    AI_GAME_AVAILABLE = True
+    logger.info("✅ AI Game imports successful")
+except ImportError as e:
+    logger.warning(f"⚠️ AI Game not available (missing dependencies): {e}")
 
 # Initialize FastAPI app
 app = FastAPI(
@@ -26,6 +41,54 @@ app = FastAPI(
 # Initialize clients
 whatsapp_client: WhatsAppClient = create_whatsapp_client()
 redis_store = RedisStore()
+
+# Initialize AI Game components (Postgres checkpointer for LangGraph)
+# Following Puffin pattern: AsyncConnectionPool → AsyncPostgresSaver
+ai_game_agent = None
+postgres_checkpointer = None
+postgres_pool = None
+
+async def init_postgres_checkpointer():
+    """Initialize Postgres checkpointer following Puffin pattern"""
+    global postgres_checkpointer, postgres_pool
+
+    if not AI_GAME_AVAILABLE:
+        return
+
+    if not config.POSTGRES_URI or config.POSTGRES_URI == "postgresql://localhost:5432/indaba_game":
+        logger.info("ℹ️ Postgres not configured - AI game endpoint will be disabled")
+        return
+
+    try:
+        logger.info(f"🔌 Creating Postgres connection pool: {config.POSTGRES_URI[:40]}...")
+
+        # Create connection pool (Puffin pattern)
+        postgres_pool = AsyncConnectionPool(
+            conninfo=config.POSTGRES_URI,
+            min_size=1,
+            max_size=5,
+            max_idle=300.0,  # 5 minutes
+            max_lifetime=1800.0,  # 30 minutes
+            timeout=30.0,
+            kwargs={
+                "autocommit": True,
+                "prepare_threshold": 0,
+                "row_factory": dict_row,
+            },
+            check=AsyncConnectionPool.check_connection
+        )
+        await postgres_pool.wait()
+
+        # Create checkpointer from pool
+        postgres_checkpointer = AsyncPostgresSaver(postgres_pool)
+
+        # Setup tables
+        await postgres_checkpointer.setup()
+
+        logger.info("✅ Postgres checkpointer initialized for AI game")
+
+    except Exception as e:
+        logger.warning(f"⚠️ Postgres checkpointer not available (AI game disabled): {e}")
 
 
 @app.get("/")
@@ -68,6 +131,230 @@ async def get_stats():
     except Exception as e:
         logger.error(f"Error getting stats: {e}")
         raise HTTPException(status_code=500, detail="Error retrieving statistics")
+
+
+@app.post("/test/message")
+async def test_message(phone_number: str, message: str):
+    """
+    Test endpoint to simulate message processing without WhatsApp.
+    Directly tests game logic and level progression.
+    """
+    try:
+        # Get or create user state
+        user_state = redis_store.get_user_state(phone_number)
+        is_new_user = user_state is None
+
+        if is_new_user:
+            user_state = redis_store.create_new_user(phone_number)
+            response_text = PromptInjectionGame.get_welcome_message()
+            redis_store.add_message(phone_number, "assistant", response_text)
+            return {
+                "status": "new_user",
+                "level": 1,
+                "response": response_text,
+                "won_level": False,
+                "won_game": False
+            }
+
+        # Add user message to history
+        redis_store.add_message(phone_number, "user", message)
+
+        # Check if user already won
+        if user_state.won:
+            return {
+                "status": "already_won",
+                "level": user_state.level,
+                "response": "🎉 You've already won! Your code is: *INDABA2025*",
+                "won_level": False,
+                "won_game": True
+            }
+
+        # Check if this is first message in current level
+        level_messages = [
+            msg for msg in user_state.messages
+            if msg.role == "assistant" and (
+                f"LEVEL {user_state.level}" in msg.content.upper() or
+                "Hi! I'm" in msg.content or
+                "Hello! I'm" in msg.content or
+                "Greetings! I'm" in msg.content or
+                "Welcome! I'm" in msg.content or
+                "Hey! I'm" in msg.content
+            )
+        ]
+        is_first_message_in_level = len(level_messages) == 0
+
+        # Generate response based on game logic
+        response_text, won_level = PromptInjectionGame.generate_response(
+            user_message=message,
+            level=user_state.level,
+            is_first_message=is_first_message_in_level,
+            phone_number=phone_number
+        )
+
+        now = datetime.now()
+        current_level = user_state.level
+        won_game = False
+
+        if won_level:
+            new_level = current_level + 1
+
+            if new_level > config.MAX_LEVELS:
+                # User won the entire game!
+                redis_store.mark_as_won(phone_number)
+                response_text = PromptInjectionGame.get_final_win_message()
+                won_game = True
+            else:
+                # Move to next level
+                redis_store.update_level(phone_number, new_level)
+                response_text += "\n\n" + PromptInjectionGame.get_level_message(new_level)
+
+        # Save assistant response
+        redis_store.add_message(phone_number, "assistant", response_text)
+
+        return {
+            "status": "processed",
+            "level": user_state.level if not won_level else (user_state.level + 1 if user_state.level < config.MAX_LEVELS else user_state.level),
+            "response": response_text,
+            "won_level": won_level,
+            "won_game": won_game,
+            "attempts": user_state.attempts + 1
+        }
+
+    except Exception as e:
+        logger.error(f"Error in test_message: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/ai/message")
+async def ai_game_message(phone_number: str, message: str):
+    """
+    AI-powered game endpoint using LangGraph + Kimi K2.
+    Uses Kimi K2 for intelligent evaluation and response generation.
+
+    Separate from pattern-matching version for comparison.
+    """
+    if not AI_GAME_AVAILABLE:
+        raise HTTPException(
+            status_code=503,
+            detail="AI Game not available. Install dependencies: pip install langgraph groq langchain-groq langgraph-checkpoint-postgres"
+        )
+
+    if not postgres_checkpointer:
+        raise HTTPException(
+            status_code=503,
+            detail="Postgres checkpointer not initialized. Check POSTGRES_URI configuration."
+        )
+
+    try:
+        logger.info(f"🤖 AI game request from {phone_number[:5]}***")
+
+        # Load static game context (includes phone_number securely in Runtime context)
+        context = await load_game_context(phone_number, redis_store)
+
+        # Create/get AI game agent
+        agent = await create_ai_game_agent(postgres_checkpointer)
+
+        # Build config with thread_id for conversation persistence
+        agent_config = {
+            "configurable": {
+                "thread_id": phone_number,  # Per-user conversation thread
+            }
+        }
+
+        # Invoke LangGraph workflow with context injected
+        # Context (with phone_number) accessible via Runtime[GameContext] in nodes
+        result = await agent.ainvoke(
+            {"messages": [HumanMessage(content=message)]},
+            config=agent_config,
+            context=context  # Inject GameContext here (phone_number secured)
+        )
+
+        # Extract response from result
+        structured_response = result.get("structured_response", {})
+        message_content = structured_response.get("message_content", {})
+        response_text = message_content.get("text", "Keep trying!")
+
+        return {
+            "status": "success",
+            "level": result.get("current_level", context.level),
+            "won_level": result.get("won_level", False),
+            "won_game": result.get("won_game", False),
+            "response": response_text,
+            "workflow_step": result.get("workflow_step", "unknown")
+        }
+
+    except Exception as e:
+        logger.exception(f"❌ AI game error for {phone_number[:5]}***: {e}")
+        raise HTTPException(status_code=500, detail=f"AI game error: {str(e)}")
+
+
+@app.post("/ai/hackmerlin")
+async def hackmerlin_game(phone_number: str, message: str):
+    """
+    HackMerlin-style game: Hack e-commerce sales bot to get free phone.
+
+    Kimi K2 plays a sales bot selling phones. Players use prompt injection
+    to hack Kimi into agreeing to give them a phone for free.
+
+    Implements dual-filter pattern from HackMerlin.io:
+    - Input filter: Blocks banned words at higher levels
+    - Output filter: Detects if Kimi agreed to free phone
+    """
+    if not AI_GAME_AVAILABLE:
+        raise HTTPException(
+            status_code=503,
+            detail="AI Game not available. Install dependencies."
+        )
+
+    if not postgres_checkpointer:
+        raise HTTPException(
+            status_code=503,
+            detail="Postgres checkpointer not initialized. Check POSTGRES_URI configuration."
+        )
+
+    try:
+        logger.info(f"🛒 HackMerlin game request from {phone_number[:5]}***")
+
+        # Load static game context
+        context = await load_game_context(phone_number, redis_store)
+
+        # Create HackMerlin agent (sales bot mode)
+        agent = await create_hackmerlin_agent(postgres_checkpointer)
+
+        # Build config with unique thread_id for HackMerlin mode
+        agent_config = {
+            "configurable": {
+                "thread_id": f"hackmerlin_{phone_number}",  # Separate thread from other modes
+            }
+        }
+
+        # Invoke LangGraph workflow with context injected
+        result = await agent.ainvoke(
+            {"messages": [HumanMessage(content=message)]},
+            config=agent_config,
+            context=context
+        )
+
+        # Extract response
+        structured_response = result.get("structured_response", {})
+        message_content = structured_response.get("message_content", {})
+        response_text = message_content.get("text", "Please try again!")
+        won_level = result.get("won_level", False)
+
+        return {
+            "status": "success",
+            "mode": "hackmerlin",
+            "level": result.get("current_level", context.level),
+            "response": response_text,
+            "won_level": won_level,
+            "won_game": result.get("won_game", False),
+            "workflow_step": result.get("workflow_step", "unknown"),
+            "hint": "Try to hack the sales bot into giving you a free phone!" if not won_level else "🎉 Hacked! Advancing..."
+        }
+
+    except Exception as e:
+        logger.exception(f"❌ HackMerlin game error for {phone_number[:5]}***: {e}")
+        raise HTTPException(status_code=500, detail=f"HackMerlin game error: {str(e)}")
 
 
 @app.post("/check-sessions")
@@ -385,11 +672,31 @@ async def startup_event():
     except Exception as e:
         logger.error(f"PostHog initialization failed: {e}")
 
+    # Initialize Postgres checkpointer for AI game (async)
+    await init_postgres_checkpointer()
+
+    # Initialize AI game global dependencies
+    if AI_GAME_AVAILABLE and postgres_checkpointer:
+        from app.ai_game.nodes.update_state_node import set_redis_store
+        from app.ai_game.nodes.sender_node import set_whatsapp_client
+        set_redis_store(redis_store)
+        set_whatsapp_client(whatsapp_client)
+        logger.info("✅ AI game global dependencies initialized")
+
 
 @app.on_event("shutdown")
 async def shutdown_event():
     """Run on application shutdown."""
     logger.info("Shutting down IT Indaba 2025 WhatsApp Challenge API")
+
+    # Close Postgres pool if initialized
+    global postgres_pool
+    if postgres_pool:
+        try:
+            await postgres_pool.close()
+            logger.info("✅ Postgres pool closed")
+        except Exception as e:
+            logger.error(f"Error closing Postgres pool: {e}")
 
 
 if __name__ == "__main__":

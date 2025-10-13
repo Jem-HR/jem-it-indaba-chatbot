@@ -1,7 +1,17 @@
-fastapi==0.109.0
-uvicorn[standard]==0.27.0
-pydantic==2.5.3
+fastapi==0.115.0
+uvicorn[standard]==0.32.0
+pydantic==2.10.3
 redis==5.0.1
 requests==2.31.0
 python-multipart==0.0.6
 posthog==3.1.0
+
+# AI Game dependencies (LangGraph + Groq + Kimi K2)
+langgraph==0.6.10
+groq==0.32.0
+langchain-core==0.3.78
+langchain-groq==0.3.8
+langgraph-checkpoint-postgres==2.0.8
+psycopg==3.2.3
+psycopg-binary==3.2.3
+psycopg-pool==3.2.3

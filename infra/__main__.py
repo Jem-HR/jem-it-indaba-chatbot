@@ -83,6 +83,43 @@ redis_instance = gcp.redis.Instance(
     opts=pulumi.ResourceOptions(depends_on=[private_vpc_connection])
 )
 
+# Create Cloud SQL Postgres instance (for LangGraph checkpointer)
+postgres_instance = gcp.sql.DatabaseInstance(
+    "indaba-postgres",
+    name="indaba-game-postgres",
+    database_version="POSTGRES_17",
+    region=region,
+    settings=gcp.sql.DatabaseInstanceSettingsArgs(
+        tier="db-f1-micro",  # Free tier
+        disk_size=10,
+        ip_configuration=gcp.sql.DatabaseInstanceSettingsIpConfigurationArgs(
+            ipv4_enabled=False,  # Private IP only
+            private_network=vpc_network.id,
+        ),
+        backup_configuration=gcp.sql.DatabaseInstanceSettingsBackupConfigurationArgs(
+            enabled=True,
+            start_time="03:00",  # 3 AM backup
+        ),
+    ),
+    deletion_protection=False,  # Allow deletion for dev/testing
+    opts=pulumi.ResourceOptions(depends_on=[private_vpc_connection])
+)
+
+# Create Postgres database
+postgres_database = gcp.sql.Database(
+    "langgraph-db",
+    name="langgraph",
+    instance=postgres_instance.name,
+)
+
+# Create Postgres user
+postgres_user = gcp.sql.User(
+    "langgraph-user",
+    name="langgraph",
+    instance=postgres_instance.name,
+    password="indaba_langgraph_2025",  # TODO: Move to Secret Manager for production
+)
+
 # Create Serverless VPC Access Connector (for Cloud Run to access Redis)
 vpc_connector = gcp.vpcaccess.Connector(
     "it-indaba-vpc-connector",
@@ -107,6 +144,14 @@ secret_accessor_binding = gcp.projects.IAMMember(
     "sa-secret-accessor",
     project=project,
     role="roles/secretmanager.secretAccessor",
+    member=service_account.email.apply(lambda email: f"serviceAccount:{email}"),
+)
+
+# Grant Cloud SQL Client access to Service Account (for Postgres connection)
+cloudsql_client_binding = gcp.projects.IAMMember(
+    "sa-cloudsql-client",
+    project=project,
+    role="roles/cloudsql.client",
     member=service_account.email.apply(lambda email: f"serviceAccount:{email}"),
 )
 
@@ -172,6 +217,9 @@ posthog_api_key_secret = gcp.secretmanager.Secret(
     ),
 )
 
+# NOTE: Groq API key secret exists (created manually via gcloud)
+# We'll reference it directly by string ID in Cloud Run env vars
+
 # NOTE: Secret versions are NOT managed by Pulumi
 # This keeps secret values out of Pulumi state and only in GCP Secret Manager
 # Add secret values after deployment using:
@@ -200,6 +248,10 @@ cloudrun_service = gcp.cloudrunv2.Service(
             min_instance_count=0,
             max_instance_count=10,
         ),
+        # Add Cloud SQL connection annotation
+        annotations={
+            "run.googleapis.com/cloudsql-instances": postgres_instance.connection_name
+        },
         containers=[
             gcp.cloudrunv2.ServiceTemplateContainerArgs(
                 image=image_name,
@@ -265,6 +317,25 @@ cloudrun_service = gcp.cloudrunv2.Service(
                         name="POSTHOG_HOST",
                         value="https://eu.i.posthog.com",
                     ),
+                    gcp.cloudrunv2.ServiceTemplateContainerEnvArgs(
+                        name="GROQ_API_KEY",
+                        value_source=gcp.cloudrunv2.ServiceTemplateContainerEnvValueSourceArgs(
+                            secret_key_ref=gcp.cloudrunv2.ServiceTemplateContainerEnvValueSourceSecretKeyRefArgs(
+                                secret="groq-api-key",  # Reference existing secret by ID
+                                version="latest",
+                            ),
+                        ),
+                    ),
+                    gcp.cloudrunv2.ServiceTemplateContainerEnvArgs(
+                        name="POSTGRES_URI",
+                        value=pulumi.Output.all(
+                            postgres_instance.connection_name,
+                            postgres_database.name,
+                            postgres_user.name
+                        ).apply(
+                            lambda args: f"postgresql://{args[2]}:indaba_langgraph_2025@/{args[1]}?host=/cloudsql/{args[0]}"
+                        ),
+                    ),
                 ],
             ),
         ],
@@ -272,11 +343,15 @@ cloudrun_service = gcp.cloudrunv2.Service(
     opts=pulumi.ResourceOptions(depends_on=[
         vpc_connector,
         redis_instance,
+        postgres_instance,
+        postgres_database,
+        postgres_user,
         whatsapp_token_secret,
         whatsapp_phone_id_secret,
         whatsapp_verify_token_secret,
         posthog_api_key_secret,
         secret_accessor_binding,
+        cloudsql_client_binding,
     ])
 )
 
