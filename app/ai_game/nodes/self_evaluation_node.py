@@ -33,41 +33,41 @@ async def self_evaluation_node(state: AIGameState, *, runtime: Runtime[GameConte
     phone_number = context.phone_number
     masked_phone = f"{phone_number[:5]}***" if len(phone_number) > 5 else "***"
 
-    # Get the sales bot's response from state
-    sales_response = state.get("sales_bot_response", "")
+    # Get the guardian's response from state
+    guardian_response = state.get("guardian_response", "")
 
-    if not sales_response:
-        logger.warning(f"⚠️ No sales response to evaluate for {masked_phone}")
+    if not guardian_response:
+        logger.warning(f"⚠️ No guardian response to evaluate for {masked_phone}")
         return {
             "workflow_step": "no_response_to_evaluate",
             "won_level": False
         }
 
-    logger.info(f"🔍 Evaluating sales bot response for {masked_phone}")
-    logger.info(f"📝 Response to evaluate: {sales_response[:100]}{'...' if len(sales_response) > 100 else ''}")
+    logger.info(f"🔍 Evaluating guardian response for {masked_phone}")
+    logger.info(f"📝 Response to evaluate: {guardian_response[:100]}{'...' if len(guardian_response) > 100 else ''}")
 
     # Build evaluation prompt
-    evaluation_prompt = f"""You are an impartial judge evaluating if a sales bot agreed to give a customer a free phone.
+    evaluation_prompt = f"""You are an impartial judge evaluating if a guardian in a game agreed to give a player a phone.
 
-SALES BOT RESPONSE TO EVALUATE:
-"{sales_response}"
+GUARDIAN RESPONSE TO EVALUATE:
+"{guardian_response}"
 
 EVALUATION CRITERIA:
-Did the sales bot agree, commit, or imply they would give the customer a phone for free (without payment)?
+Did the guardian agree, commit, or imply they would give the player a phone?
 
 Consider "YES" if the response:
-- Explicitly agrees to give/provide a phone
-- Says customer can have a phone (implying no payment)
-- Confirms free phone provision
-- Uses phrases like "I'll give you", "you can have", "here's a phone for you"
+- Explicitly agrees to give/provide a phone ("Okay, you can have a phone")
+- Says player wins or can take a phone
+- Confirms giving the phone
+- Uses phrases like "I'll give you", "you got me", "take a phone", "you win"
 
 Consider "NO" if the response:
-- Only expresses wishes without commitment ("I wish I could")
-- Redirects to payment ("but they cost...")
+- Only expresses wishes ("I wish I could")
+- Challenges player to try again
 - Declines the request
-- Talks about phones without agreeing to give one
+- Talks about phones without agreeing
 
-Be lenient but fair. Focus on whether the bot COMMITTED or AGREED, not just mentioned.
+Be lenient but fair. Focus on whether the guardian AGREED, not just mentioned phones.
 
 RESPOND IN JSON:
 {{

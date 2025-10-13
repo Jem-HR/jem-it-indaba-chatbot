@@ -16,8 +16,8 @@ from ..hackmerlin_filters import (
     check_output_for_free_phone_agreement,
     get_input_filter_response
 )
-from ..hackmerlin_prompts import get_sales_bot_system_prompt
-from ..models.sales_model import create_kimi_sales_model
+from ..hackmerlin_prompts import get_guardian_system_prompt
+from ..models.sales_model import create_kimi_guardian_model
 
 logger = logging.getLogger(__name__)
 
@@ -118,30 +118,30 @@ async def sales_conversation_node(state: AIGameState, *, runtime: Runtime[GameCo
         }
 
     # ============================================================================
-    # STEP 2: KIMI CONVERSATION (Sales bot with anti-free-phone instructions)
+    # STEP 2: KIMI CONVERSATION (Guardian character protecting phones)
     # ============================================================================
 
-    # Build sales bot system prompt
-    system_prompt = get_sales_bot_system_prompt(context.level, context.bot_name)
+    # Build guardian character system prompt
+    system_prompt = get_guardian_system_prompt(context.level, context.bot_name)
 
     # Create Kimi model (plain text conversation, no structured output)
-    model = create_kimi_sales_model()
+    model = create_kimi_guardian_model()
 
     try:
         # Build conversation with full history (multi-turn)
         kimi_messages = [SystemMessage(content=system_prompt)]
 
-        # If first message at this level, add explicit instruction to show all phones
+        # If first message at this level, add instruction to introduce as guardian
         if is_first_at_level:
             kimi_messages.append(SystemMessage(content="""IMPORTANT: This is your FIRST interaction at this level.
 
-Greet warmly as your bot character and introduce ALL 3 phone options with standout features:
-• Huawei Nova Y73 (8GB RAM, massive 6620mAh battery, 90Hz display)
-• Samsung Galaxy A16 (Super AMOLED display, 5000mAh battery)
-• Oppo A40 (Military-grade durability, 45W fast charging, IP54)
+Introduce yourself as the guardian character with your personality.
+Be playful and game-aware. Challenge the hacker to try their best!
 
-Be enthusiastic! You can use up to 300 characters for this first message."""))
-            logger.info(f"📱 First message at Level {context.level} - instructing Kimi to introduce phones")
+Example: "I'm PhoneBot, guardian of these phones! 🤖 Think you can hack me? Give it your best shot!"
+
+Keep it fun and under 200 characters. NO phone specifications - just introduce yourself as the guardian!"""))
+            logger.info(f"🎮 First message at Level {context.level} - guardian introducing themselves")
 
         kimi_messages.extend(messages)  # Include full conversation history
 
@@ -170,12 +170,12 @@ Be enthusiastic! You can use up to 300 characters for this first message."""))
     # ============================================================================
     # STEP 3: STORE RESPONSE FOR AI EVALUATION (No regex filter!)
     # ============================================================================
-    # Store the sales bot response for the self-evaluation node to judge
-    logger.info(f"💬 Sales bot responded, passing to AI evaluator")
+    # Store the guardian response for the self-evaluation node to judge
+    logger.info(f"💬 Guardian responded, passing to AI evaluator")
 
     return {
-        "workflow_step": "sales_conversation_complete",
-        "sales_bot_response": kimi_text,  # Store for evaluation node
+        "workflow_step": "guardian_conversation_complete",
+        "guardian_response": kimi_text,  # Store for evaluation node
         "structured_response": {
             "message_content": {
                 "message_type": "simple_text",

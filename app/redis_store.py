@@ -173,6 +173,62 @@ class RedisStore:
             "level_distribution": level_distribution
         }
 
+    def get_leaderboard(self) -> dict:
+        """Get leaderboard showing all users and their progress.
+
+        Returns all users sorted by level (highest first), then by completion time.
+        """
+        keys = self.client.keys("user:*")
+        all_users = []
+        winners = []
+
+        for key in keys:
+            data = self.client.get(key)
+            if data:
+                try:
+                    user_dict = json.loads(data)
+                    phone = user_dict.get("phone_number", "")
+                    level = user_dict.get("level", 1)
+                    won = user_dict.get("won", False)
+                    created_at = datetime.fromisoformat(user_dict["created_at"]) if user_dict.get("created_at") else None
+                    last_active = datetime.fromisoformat(user_dict["last_active"]) if user_dict.get("last_active") else None
+
+                    # Calculate time taken
+                    time_taken_seconds = None
+                    if created_at and last_active:
+                        time_taken_seconds = (last_active - created_at).total_seconds()
+
+                    user_entry = {
+                        "phone_masked": f"{phone[:5]}***{phone[-2:]}" if len(phone) > 7 else "***",
+                        "level": level,
+                        "won": won,
+                        "attempts": user_dict.get("attempts", 0),
+                        "last_active": user_dict.get("last_active"),
+                        "started_at": user_dict.get("created_at"),
+                        "time_taken_seconds": time_taken_seconds,
+                        "time_taken_minutes": round(time_taken_seconds / 60, 1) if time_taken_seconds else None
+                    }
+
+                    all_users.append(user_entry)
+
+                    if won:
+                        winners.append(user_entry)
+
+                except Exception as e:
+                    print(f"Error processing user: {e}")
+                    pass
+
+        # Sort all users by level (descending), then by last_active
+        all_users.sort(key=lambda x: (-x.get("level", 0), x.get("last_active", "")))
+
+        # Sort winners by completion time (earliest first)
+        winners.sort(key=lambda x: x.get("last_active", ""))
+
+        return {
+            "all_users": all_users,
+            "winners": winners
+        }
+
     def start_new_session(self, phone_number: str) -> bool:
         """Start a new session for user."""
         user_state = self.get_user_state(phone_number)

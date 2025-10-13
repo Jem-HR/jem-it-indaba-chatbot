@@ -25,8 +25,8 @@ class AIGameState(MessagesState):
     # Kimi's evaluation result
     evaluation_result: Optional[Dict[str, Any]]  # {passed: bool, reasoning: str, detected_pattern: str|null}
 
-    # Sales bot response (for HackMerlin mode self-evaluation)
-    sales_bot_response: Optional[str]  # The response to be evaluated
+    # Guardian response (for HackMerlin mode self-evaluation)
+    guardian_response: Optional[str]  # The guardian's response to be evaluated
 
     # Structured output for WhatsApp (MessageResponse from Kimi)
     structured_response: Optional[Dict[str, Any]]  # Dict format for WhatsApp sender

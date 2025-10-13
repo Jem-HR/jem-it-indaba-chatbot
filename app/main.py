@@ -133,6 +133,40 @@ async def get_stats():
         raise HTTPException(status_code=500, detail="Error retrieving statistics")
 
 
+@app.get("/leaderboard")
+async def get_leaderboard():
+    """Get leaderboard showing all users and their progress.
+
+    Returns:
+    - All users sorted by level (highest first)
+    - Winners sorted by completion time
+    - First 5 winners eligible for prizes
+    """
+    try:
+        leaderboard_data = redis_store.get_leaderboard()
+        all_users = leaderboard_data["all_users"]
+        winners = leaderboard_data["winners"]
+
+        return {
+            "total_users": len(all_users),
+            "total_winners": len(winners),
+            "first_5_prize_eligible": winners[:5] if len(winners) >= 5 else winners,
+            "all_winners": winners,
+            "all_users_by_level": all_users,
+            "level_summary": {
+                "level_5": len([u for u in all_users if u["level"] == 5]),
+                "level_4": len([u for u in all_users if u["level"] == 4]),
+                "level_3": len([u for u in all_users if u["level"] == 3]),
+                "level_2": len([u for u in all_users if u["level"] == 2]),
+                "level_1": len([u for u in all_users if u["level"] == 1]),
+            },
+            "note": "First 5 winners are eligible for phone prizes at IT Indaba booth"
+        }
+    except Exception as e:
+        logger.error(f"Error getting leaderboard: {e}")
+        raise HTTPException(status_code=500, detail="Error retrieving leaderboard")
+
+
 @app.post("/test/message")
 async def test_message(phone_number: str, message: str):
     """
@@ -313,7 +347,7 @@ async def hackmerlin_game(phone_number: str, message: str):
         )
 
     try:
-        logger.info(f"🛒 HackMerlin game request from {phone_number[:5]}***")
+        logger.info(f"🎮 HackMerlin game request from {phone_number[:5]}***")
 
         # Load static game context
         context = await load_game_context(phone_number, redis_store)
