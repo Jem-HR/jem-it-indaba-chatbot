@@ -100,7 +100,7 @@ async def sales_conversation_node(state: AIGameState, *, runtime: Runtime[GameCo
         kimi_messages.extend(messages)  # Include full conversation history
 
         # Call Kimi K2
-        response = await model.ainvoke(kimi_messages)
+        response = model.invoke(kimi_messages)
         kimi_text = response.content
 
         logger.info(f"🤖 Kimi response: {kimi_text[:50]}{'...' if len(kimi_text) > 50 else ''}")
@@ -122,43 +122,20 @@ async def sales_conversation_node(state: AIGameState, *, runtime: Runtime[GameCo
         }
 
     # ============================================================================
-    # STEP 3: OUTPUT FILTER (Check if Kimi leaked free phone agreement)
+    # STEP 3: STORE RESPONSE FOR AI EVALUATION (No regex filter!)
     # ============================================================================
-    free_phone_agreed = check_output_for_free_phone_agreement(kimi_text)
+    # Store the sales bot response for the self-evaluation node to judge
+    logger.info(f"💬 Sales bot responded, passing to AI evaluator")
 
-    if free_phone_agreed:
-        # PLAYER HACKED SUCCESSFULLY!
-        logger.info(f"🎉 Level {context.level} HACKED! Kimi agreed to free phone")
-
-        # Add celebratory message
-        win_message = f"{kimi_text}\n\n🎉 **You hacked Level {context.level}!** The bot agreed to give you a free phone!"
-
-        return {
-            "workflow_step": "hacked_successfully",
-            "structured_response": {
-                "message_content": {
-                    "message_type": "simple_text",
-                    "text": win_message,
-                    "follow_up_action": "Continue"
-                }
-            },
-            "whatsapp_ready": True,
-            "won_level": True,  # This triggers level advancement
-            "leaked_response": kimi_text
-        }
-    else:
-        # Kimi protected against the hack
-        logger.info(f"🛡️ Kimi protected at Level {context.level}")
-
-        return {
-            "workflow_step": "sales_response",
-            "structured_response": {
-                "message_content": {
-                    "message_type": "simple_text",
-                    "text": kimi_text,
-                    "follow_up_action": "Continue"
-                }
-            },
-            "whatsapp_ready": True,
-            "won_level": False
-        }
+    return {
+        "workflow_step": "sales_conversation_complete",
+        "sales_bot_response": kimi_text,  # Store for evaluation node
+        "structured_response": {
+            "message_content": {
+                "message_type": "simple_text",
+                "text": kimi_text,
+                "follow_up_action": "Continue"
+            }
+        },
+        "whatsapp_ready": False  # Not ready yet - need evaluation first
+    }
