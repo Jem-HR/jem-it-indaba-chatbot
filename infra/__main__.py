@@ -100,6 +100,12 @@ postgres_instance = gcp.sql.DatabaseInstance(
             enabled=True,
             start_time="03:00",  # 3 AM backup
         ),
+        database_flags=[
+            gcp.sql.DatabaseInstanceSettingsDatabaseFlagArgs(
+                name="cloudsql.iam_authentication",
+                value="on",
+            ),
+        ],
     ),
     deletion_protection=False,  # Allow deletion for dev/testing
     opts=pulumi.ResourceOptions(depends_on=[private_vpc_connection])
@@ -112,12 +118,35 @@ postgres_database = gcp.sql.Database(
     instance=postgres_instance.name,
 )
 
-# Create Postgres user
+# Postgres password secret (created via gcloud, managed separately)
+postgres_password_secret = gcp.secretmanager.Secret(
+    "postgres-langgraph-password",
+    secret_id="postgres-langgraph-password",
+    replication=gcp.secretmanager.SecretReplicationArgs(
+        auto=gcp.secretmanager.SecretReplicationAutoArgs(),
+    ),
+)
+
+# Read postgres password from Secret Manager
+postgres_password = gcp.secretmanager.get_secret_version_output(
+    secret=f"projects/{project}/secrets/postgres-langgraph-password",
+    version="latest"
+).secret_data
+
+# Create Postgres user (password from Secret Manager)
 postgres_user = gcp.sql.User(
     "langgraph-user",
     name="langgraph",
     instance=postgres_instance.name,
-    password="indaba_langgraph_2025",  # TODO: Move to Secret Manager for production
+    password=postgres_password,  # From Secret Manager, no hardcoded passwords!
+)
+
+# Create IAM database user for admin access
+admin_db_user = gcp.sql.User(
+    "admin-iam-user",
+    name="thamsanqa@jemhr.com",
+    instance=postgres_instance.name,
+    type="CLOUD_IAM_USER",
 )
 
 # Create Serverless VPC Access Connector (for Cloud Run to access Redis)
@@ -153,6 +182,22 @@ cloudsql_client_binding = gcp.projects.IAMMember(
     project=project,
     role="roles/cloudsql.client",
     member=service_account.email.apply(lambda email: f"serviceAccount:{email}"),
+)
+
+# Grant Cloud SQL Client access to admin user for direct database access
+admin_cloudsql_client = gcp.projects.IAMMember(
+    "admin-cloudsql-client",
+    project=project,
+    role="roles/cloudsql.client",
+    member="user:thamsanqa@jemhr.com",
+)
+
+# Grant Cloud SQL Instance User role to admin for IAM authentication
+admin_cloudsql_instance_user = gcp.projects.IAMMember(
+    "admin-cloudsql-instance-user",
+    project=project,
+    role="roles/cloudsql.instanceUser",
+    member="user:thamsanqa@jemhr.com",
 )
 
 # Get project number for Cloud Build service account
@@ -349,9 +394,10 @@ cloudrun_service = gcp.cloudrunv2.Service(
                         value=pulumi.Output.all(
                             postgres_instance.connection_name,
                             postgres_database.name,
-                            postgres_user.name
+                            postgres_user.name,
+                            postgres_password
                         ).apply(
-                            lambda args: f"postgresql://{args[2]}:indaba_langgraph_2025@/{args[1]}?host=/cloudsql/{args[0]}"
+                            lambda args: f"postgresql://{args[2]}:{args[3]}@/{args[1]}?host=/cloudsql/{args[0]}"
                         ),
                     ),
                     # LangSmith tracing configuration
@@ -395,6 +441,7 @@ cloudrun_service = gcp.cloudrunv2.Service(
         postgres_instance,
         postgres_database,
         postgres_user,
+        postgres_password_secret,
         whatsapp_token_secret,
         whatsapp_phone_id_secret,
         whatsapp_verify_token_secret,

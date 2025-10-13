@@ -106,7 +106,8 @@ async def update_state_node(state: AIGameState, *, runtime: Runtime[GameContext]
                 return {
                     "workflow_step": "level_advanced",
                     "current_level": new_level,
-                    "won_game": False
+                    "won_game": False,
+                    "skip_whatsapp_send": True  # We already sent level intro
                 }
         else:
             # Failed attempt - just increment counter (already done in add_message)
