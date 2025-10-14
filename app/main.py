@@ -464,9 +464,10 @@ Ready to continue? 🚀"""
                 # Continue button from welcome - check if Level 1 intro needed
                 user_state = game_store.get_user_state(from_number)
 
-                # If Level 1 and no USER messages yet (exclude welcome), send Level 1 intro
+                # If Level 1 and no actual USER messages yet (exclude welcome and button clicks), send Level 1 intro
                 if user_state and user_state.level == 1:
-                    user_messages = [m for m in user_state.messages if m.role == "user"]
+                    # Filter out button clicks from message count
+                    user_messages = [m for m in user_state.messages if m.role == "user" and not m.content.startswith("[Button:")]
 
                     if len(user_messages) == 0:
                         from app.ai_game.hackmerlin_prompts import get_level_introduction
@@ -511,9 +512,32 @@ Ready to continue? 🚀"""
                 return
 
             elif button_id == "continue_game":
-                # User wants to continue playing - just acknowledge, wait for their message
-                logger.info(f"▶️ User clicked continue game - waiting for their message")
-                return  # Don't send button text to agent!
+                # User wants to continue playing - re-show current level intro
+                from app.ai_game.hackmerlin_prompts import get_level_introduction
+                from app.level_configs import LEVEL_CONFIGS
+
+                user_state = game_store.get_user_state(from_number)
+
+                if user_state:
+                    level_config = LEVEL_CONFIGS.get(user_state.level)
+                    if level_config:
+                        intro_text = get_level_introduction(user_state.level, level_config["bot_name"])
+                        buttons = [
+                            ("continue_game", "▶️ Start Hacking"),
+                            ("learn_defense", "🛡️ Learn More")
+                        ]
+
+                        whatsapp_client.send_interactive_buttons(
+                            from_number,
+                            intro_text,
+                            buttons
+                        )
+                        logger.info(f"📱 Re-sent Level {user_state.level} intro after educational content")
+                        return
+
+                # Fallback if user_state not found
+                whatsapp_client.send_message(from_number, "Ready to continue! Send your message to hack the guardian...")
+                return
 
             elif button_id == "main_menu":
                 # Show main menu
