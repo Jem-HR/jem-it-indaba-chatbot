@@ -2,12 +2,9 @@
 
 import hmac
 import hashlib
-import logging
 import requests
 from typing import Optional, Dict, Any, List, Tuple
 from app.config import config
-
-logger = logging.getLogger(__name__)
 
 
 class WhatsAppClient:
@@ -51,9 +48,9 @@ class WhatsAppClient:
             response.raise_for_status()
             return True
         except requests.exceptions.RequestException as e:
-            logger.error(f"Error sending WhatsApp message: {e}")
+            print(f"Error sending WhatsApp message: {e}")
             if hasattr(e, 'response') and e.response is not None:
-                logger.error(f"Response: {e.response.text}")
+                print(f"Response: {e.response.text}")
             return False
 
     def send_image_message(self, to: str, image_url: str, caption: Optional[str] = None) -> bool:
@@ -91,9 +88,9 @@ class WhatsAppClient:
             response.raise_for_status()
             return True
         except requests.exceptions.RequestException as e:
-            logger.error(f"Error sending WhatsApp image: {e}")
+            print(f"Error sending WhatsApp image: {e}")
             if hasattr(e, 'response') and e.response is not None:
-                logger.error(f"Response: {e.response.text}")
+                print(f"Response: {e.response.text}")
             return False
 
     def send_interactive_buttons(
@@ -115,9 +112,9 @@ class WhatsAppClient:
         Returns:
             True if successful, False otherwise
         """
-        if len(buttons) > config.MAX_BUTTONS:
-            logger.warning(f"WhatsApp supports max {config.MAX_BUTTONS} buttons, truncating")
-            buttons = buttons[:config.MAX_BUTTONS]
+        if len(buttons) > 3:
+            print("Warning: WhatsApp supports max 3 buttons, truncating")
+            buttons = buttons[:3]
 
         url = f"{self.base_url}/messages"
         headers = {
@@ -130,7 +127,7 @@ class WhatsAppClient:
                 "type": "reply",
                 "reply": {
                     "id": button_id,
-                    "title": button_text[:config.BUTTON_TEXT_MAX_LENGTH]  # Max chars for button text
+                    "title": button_text[:20]  # Max 20 chars for button text
                 }
             }
             for button_id, button_text in buttons
@@ -167,9 +164,9 @@ class WhatsAppClient:
             response.raise_for_status()
             return True
         except requests.exceptions.RequestException as e:
-            logger.error(f"Error sending WhatsApp interactive message: {e}")
+            print(f"Error sending WhatsApp interactive message: {e}")
             if hasattr(e, 'response') and e.response is not None:
-                logger.error(f"Response: {e.response.text}")
+                print(f"Response: {e.response.text}")
             return False
 
     def mark_message_read(self, message_id: str) -> bool:
@@ -198,7 +195,7 @@ class WhatsAppClient:
             response.raise_for_status()
             return True
         except requests.exceptions.RequestException as e:
-            logger.error(f"Error marking message as read: {e}")
+            print(f"Error marking message as read: {e}")
             return False
 
     @staticmethod
@@ -286,7 +283,7 @@ class WhatsAppClient:
                 return None
 
         except (KeyError, IndexError, TypeError) as e:
-            logger.error(f"Error parsing webhook message: {e}")
+            print(f"Error parsing webhook message: {e}")
             return None
 
     @staticmethod
@@ -318,7 +315,7 @@ class WhatsAppClient:
                 "recipient_id": status.get("recipient_id")
             }
         except (KeyError, IndexError, TypeError) as e:
-            logger.error(f"Error parsing webhook status: {e}")
+            print(f"Error parsing webhook status: {e}")
             return None
 
 

@@ -10,9 +10,6 @@ from app.config import config
 from app.whatsapp import create_whatsapp_client, WhatsAppClient
 from app.postgres_store import PostgresStore
 from app import analytics
-from app.webhook.handlers import WebhookHandler
-from app.services.session_service import SessionService
-from app.security.webhook_verification import verify_webhook_signature, validate_webhook_payload
 
 # Configure logging FIRST (before any logging calls)
 logging.basicConfig(level=logging.INFO)
@@ -248,24 +245,53 @@ async def hackmerlin_game(phone_number: str, message: str):
         raise HTTPException(status_code=500, detail=f"HackMerlin game error: {str(e)}")
 
 
-# Initialize session service (will be set in startup)
-session_service: Optional[SessionService] = None
-
-
 @app.post("/check-sessions")
 async def check_inactive_sessions():
     """
     Background job endpoint to check for inactive users and send warnings.
     Called by Cloud Scheduler every minute.
     """
-    if not session_service:
-        raise HTTPException(status_code=503, detail="Session service not initialized")
-    
-    return await session_service.check_inactive_sessions()
+    try:
+        logger.info("Checking for inactive sessions...")
 
+        # Find users inactive for 2 minutes (who need warning)
+        users_to_warn = game_store.get_inactive_users_for_warning(config.SESSION_WARNING_MINUTES)
+        logger.info(f"Users needing warning: {len(users_to_warn)}")
 
-# Initialize webhook handler (will be set in startup)
-webhook_handler: Optional[WebhookHandler] = None
+        warnings_sent = 0
+        for phone_number in users_to_warn:
+            try:
+                warning_msg = """⏰ *Hey there!* Still working on the challenge?
+
+Your session will expire in *1 minute* if you don't respond!
+
+Don't worry - you can always start again from where you left off. But let's keep the momentum going! 💪
+
+Send any message to keep your session active! 🎮"""
+                success = whatsapp_client.send_message(phone_number, warning_msg)
+
+                if success:
+                    game_store.mark_session_warned(phone_number)
+                    warnings_sent += 1
+                    logger.info(f"✅ Sent inactivity warning to {phone_number}")
+
+                    # Track session warning sent
+                    analytics.track_session_warning_sent(phone_number, config.SESSION_WARNING_MINUTES)
+                else:
+                    logger.error(f"❌ Failed to send warning to {phone_number}")
+            except Exception as e:
+                logger.error(f"❌ Error sending warning to {phone_number}: {e}")
+
+        logger.info(f"Session check complete. Warnings sent: {warnings_sent}/{len(users_to_warn)}")
+
+        return {
+            "status": "ok",
+            "users_checked": len(users_to_warn),
+            "warnings_sent": warnings_sent
+        }
+    except Exception as e:
+        logger.error(f"Error in check_inactive_sessions: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.get("/webhook")
@@ -278,10 +304,15 @@ async def verify_webhook(
     Webhook verification endpoint for WhatsApp.
     WhatsApp will call this to verify the webhook URL.
     """
-    if not webhook_handler:
-        raise HTTPException(status_code=503, detail="Webhook handler not initialized")
-    
-    return await webhook_handler.verify_webhook(hub_mode, hub_challenge, hub_verify_token)
+    logger.info(f"Webhook verification request: mode={hub_mode}, token={hub_verify_token}")
+
+    # Verify the token matches
+    if hub_mode == "subscribe" and hub_verify_token == config.WHATSAPP_VERIFY_TOKEN:
+        logger.info("Webhook verified successfully")
+        return PlainTextResponse(content=hub_challenge)
+    else:
+        logger.warning("Webhook verification failed")
+        raise HTTPException(status_code=403, detail="Verification failed")
 
 
 @app.post("/webhook")
@@ -289,10 +320,39 @@ async def webhook(request: Request):
     """
     Webhook endpoint to receive WhatsApp messages.
     """
-    if not webhook_handler:
-        raise HTTPException(status_code=503, detail="Webhook handler not initialized")
-    
-    return await webhook_handler.handle_webhook(request)
+    try:
+        # Get raw body for signature verification
+        body = await request.body()
+        payload = await request.json()
+
+        # Log incoming webhook
+        logger.info(f"Received webhook: {payload}")
+
+        # Verify signature (optional but recommended)
+        signature = request.headers.get("X-Hub-Signature-256", "")
+        # if not WhatsAppClient.verify_webhook_signature(body, signature):
+        #     logger.warning("Invalid webhook signature")
+        #     raise HTTPException(status_code=403, detail="Invalid signature")
+
+        # Parse message
+        message_data = WhatsAppClient.parse_webhook_message(payload)
+
+        if message_data:
+            # Process the message
+            await process_message(
+                from_number=message_data["from"],
+                message_text=message_data["text"],
+                message_id=message_data["message_id"],
+                button_id=message_data.get("button_id")
+            )
+
+        # Always return 200 OK to WhatsApp
+        return JSONResponse(content={"status": "ok"}, status_code=200)
+
+    except Exception as e:
+        logger.error(f"Error processing webhook: {e}", exc_info=True)
+        # Still return 200 to avoid WhatsApp retries
+        return JSONResponse(content={"status": "error"}, status_code=200)
 
 
 async def process_message(from_number: str, message_text: str, message_id: str, button_id: Optional[str] = None):
@@ -401,16 +461,14 @@ Ready to continue? 🚀"""
                 return
 
             elif button_id == "continue":
-                # Continue button from welcome - always send Level 1 intro at start
+                # Continue button from welcome - check if Level 1 intro needed
                 user_state = game_store.get_user_state(from_number)
 
-                # Check if this is Level 1 start (no user messages yet)
+                # If Level 1 and no USER messages yet (exclude welcome), send Level 1 intro
                 if user_state and user_state.level == 1:
-                    # Count actual user-sent messages (not welcome/system)
-                    user_messages = [m for m in user_state.messages if m.role == "user" and not m.content.startswith("[Button:")]
+                    user_messages = [m for m in user_state.messages if m.role == "user"]
 
                     if len(user_messages) == 0:
-                        # First time at Level 1 - send intro
                         from app.ai_game.hackmerlin_prompts import get_level_introduction
                         from app.level_configs import LEVEL_CONFIGS
 
@@ -427,10 +485,6 @@ Ready to continue? 🚀"""
                         )
                         logger.info(f"📱 Sent Level 1 intro to {from_number[:5]}***")
                         return
-                    else:
-                        logger.info(f"User has {len(user_messages)} user messages, not showing intro")
-                else:
-                    logger.info(f"User state: {user_state.level if user_state else 'None'}")
 
                 # Continue buttons just acknowledge - don't send to agent
                 logger.info(f"▶️ User clicked continue - waiting for their actual message")
@@ -457,32 +511,9 @@ Ready to continue? 🚀"""
                 return
 
             elif button_id == "continue_game":
-                # User wants to continue playing - re-show current level intro
-                from app.ai_game.hackmerlin_prompts import get_level_introduction
-                from app.level_configs import LEVEL_CONFIGS
-
-                user_state = game_store.get_user_state(from_number)
-
-                if user_state:
-                    level_config = LEVEL_CONFIGS.get(user_state.level)
-                    if level_config:
-                        intro_text = get_level_introduction(user_state.level, level_config["bot_name"])
-                        buttons = [
-                            ("continue_game", "▶️ Start Hacking"),
-                            ("learn_defense", "🛡️ Learn More")
-                        ]
-
-                        whatsapp_client.send_interactive_buttons(
-                            from_number,
-                            intro_text,
-                            buttons
-                        )
-                        logger.info(f"📱 Re-sent Level {user_state.level} intro after educational content")
-                        return
-
-                # Fallback if user_state not found
-                whatsapp_client.send_message(from_number, "Ready to continue! Send your message to hack the guardian...")
-                return
+                # User wants to continue playing - just acknowledge, wait for their message
+                logger.info(f"▶️ User clicked continue game - waiting for their message")
+                return  # Don't send button text to agent!
 
             elif button_id == "main_menu":
                 # Show main menu
@@ -596,8 +627,6 @@ Ready to try again? Click continue!"""
 @app.on_event("startup")
 async def startup_event():
     """Run on application startup."""
-    global webhook_handler, session_service, game_store
-
     logger.info("Starting IT Indaba 2025 WhatsApp Challenge API")
     logger.info(f"Environment: {config.GCP_PROJECT_ID}")
 
@@ -635,22 +664,6 @@ async def startup_event():
         set_whatsapp_client(whatsapp_client)
         set_update_whatsapp(whatsapp_client)  # Also set for update_state_node
         logger.info("✅ AI game global dependencies initialized")
-
-    # Initialize service handlers
-    if game_store:
-        webhook_handler = WebhookHandler(game_store, whatsapp_client)
-        session_service = SessionService(game_store, whatsapp_client)
-        logger.info("✅ Service handlers initialized")
-    else:
-        logger.error("❌ Cannot initialize service handlers - game_store is None")
-        # Try initializing game_store again
-        try:
-            game_store = PostgresStore()
-            webhook_handler = WebhookHandler(game_store, whatsapp_client)
-            session_service = SessionService(game_store, whatsapp_client)
-            logger.info("✅ Service handlers initialized (after retry)")
-        except Exception as retry_error:
-            logger.error(f"Failed to initialize services even after retry: {retry_error}")
 
 
 @app.on_event("shutdown")

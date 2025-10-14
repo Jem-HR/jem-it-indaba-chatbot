@@ -17,7 +17,6 @@ from sqlalchemy.pool import NullPool
 
 from app.models import UserState, Message as MessageModel
 from app.config import config
-from app.database import get_db_session, with_session, transactional
 
 logger = logging.getLogger(__name__)
 
@@ -106,10 +105,10 @@ class PostgresStore:
         # Create engine with proper connection pooling for concurrent players
         self.engine = create_engine(
             self.db_uri,
-            pool_size=config.DB_POOL_SIZE,
-            max_overflow=config.DB_MAX_OVERFLOW,
-            pool_pre_ping=config.DB_POOL_PRE_PING,
-            pool_recycle=config.DB_POOL_RECYCLE,
+            pool_size=5,              # Keep 5 connections warm
+            max_overflow=15,          # Allow 15 extra during burst (total 20 for 20 concurrent players)
+            pool_pre_ping=True,       # Test connection health before using
+            pool_recycle=3600,        # Recycle connections after 1 hour
             echo=False
         )
 
@@ -120,8 +119,8 @@ class PostgresStore:
         self.SessionLocal = sessionmaker(bind=self.engine)
 
         logger.info("✅ PostgresStore initialized with connection pool:")
-        logger.info(f"   Pool size: {config.DB_POOL_SIZE}, Max overflow: {config.DB_MAX_OVERFLOW} (handles up to {config.DB_POOL_SIZE + config.DB_MAX_OVERFLOW} concurrent)")
-        logger.info(f"   Pool recycle: {config.DB_POOL_RECYCLE} seconds")
+        logger.info(f"   Pool size: 5, Max overflow: 15 (handles up to 20 concurrent)")
+        logger.info(f"   Database: db-g1-small (1 vCPU, 1.7GB RAM)")
 
     def _get_session(self) -> Session:
         """Get database session"""
@@ -129,7 +128,8 @@ class PostgresStore:
 
     def get_user_state(self, phone_number: str) -> Optional[UserState]:
         """Retrieve user state from Postgres"""
-        with get_db_session(self.SessionLocal) as session:
+        session = self._get_session()
+        try:
             user = session.query(User).filter(User.phone_number == phone_number).first()
 
             if not user:
@@ -163,9 +163,13 @@ class PostgresStore:
                 session_expired=user.session_expired
             )
 
+        finally:
+            session.close()
+
     def create_new_user(self, phone_number: str) -> UserState:
         """Create a new user in Postgres"""
-        with get_db_session(self.SessionLocal) as session:
+        session = self._get_session()
+        try:
             now = datetime.now()
             user = User(
                 phone_number=phone_number,
@@ -180,6 +184,8 @@ class PostgresStore:
             )
 
             session.add(user)
+            session.commit()
+
             logger.info(f"✨ Created new user: {phone_number[:5]}***")
 
             return UserState(
@@ -195,80 +201,77 @@ class PostgresStore:
                 session_expired=False
             )
 
+        except Exception as e:
+            session.rollback()
+            logger.error(f"Failed to create user: {e}")
+            raise
+        finally:
+            session.close()
+
     def add_message(self, phone_number: str, role: str, content: str) -> bool:
         """Add a message to user's history"""
+        session = self._get_session()
         try:
-            with get_db_session(self.SessionLocal) as session:
-                # Get user
+            # Get user
+            user = session.query(User).filter(User.phone_number == phone_number).first()
+
+            if not user:
+                # Create user if doesn't exist
+                session.close()
+                self.create_new_user(phone_number)
+                session = self._get_session()
                 user = session.query(User).filter(User.phone_number == phone_number).first()
 
-                if not user:
-                    # Create user if doesn't exist
-                    self.create_new_user(phone_number)
-                    # Get fresh session after user creation
-                    with get_db_session(self.SessionLocal) as fresh_session:
-                        user = fresh_session.query(User).filter(User.phone_number == phone_number).first()
-                        
-                        # Add message
-                        now = datetime.now()
-                        message = Message(
-                            phone_number=phone_number,
-                            role=role,
-                            content=content,
-                            timestamp=now,
-                            level=user.level
-                        )
+            # Add message
+            now = datetime.now()
+            message = Message(
+                phone_number=phone_number,
+                role=role,
+                content=content,
+                timestamp=now,
+                level=user.level
+            )
 
-                        fresh_session.add(message)
+            session.add(message)
 
-                        # Update user's last_active and increment attempts if user message
-                        user.last_active = now
-                        if role == "user":
-                            user.attempts += 1
-                            user.session_warned = False  # Reset warning when user is active
-                else:
-                    # Add message
-                    now = datetime.now()
-                    message = Message(
-                        phone_number=phone_number,
-                        role=role,
-                        content=content,
-                        timestamp=now,
-                        level=user.level
-                    )
+            # Update user's last_active and increment attempts if user message
+            user.last_active = now
+            if role == "user":
+                user.attempts += 1
+                user.session_warned = False  # Reset warning when user is active
 
-                    session.add(message)
-
-                    # Update user's last_active and increment attempts if user message
-                    user.last_active = now
-                    if role == "user":
-                        user.attempts += 1
-                        user.session_warned = False  # Reset warning when user is active
-
-                return True
+            session.commit()
+            return True
 
         except Exception as e:
+            session.rollback()
             logger.error(f"Failed to add message: {e}")
             return False
+        finally:
+            session.close()
 
     def update_level(self, phone_number: str, new_level: int) -> bool:
         """Update user's level"""
+        session = self._get_session()
         try:
-            with get_db_session(self.SessionLocal) as session:
-                user = session.query(User).filter(User.phone_number == phone_number).first()
+            user = session.query(User).filter(User.phone_number == phone_number).first()
 
-                if not user:
-                    return False
+            if not user:
+                return False
 
-                user.level = new_level
-                user.last_active = datetime.now()
+            user.level = new_level
+            user.last_active = datetime.now()
 
-                logger.info(f"📈 Updated {phone_number[:5]}*** to Level {new_level}")
-                return True
+            session.commit()
+            logger.info(f"📈 Updated {phone_number[:5]}*** to Level {new_level}")
+            return True
 
         except Exception as e:
+            session.rollback()
             logger.error(f"Failed to update level: {e}")
             return False
+        finally:
+            session.close()
 
     def mark_as_won(self, phone_number: str) -> bool:
         """Mark user as having won the game"""
@@ -506,11 +509,14 @@ class PostgresStore:
 
     def ping(self) -> bool:
         """Test database connection"""
+        session = self._get_session()
         try:
-            with get_db_session(self.SessionLocal) as session:
-                from sqlalchemy import text
-                session.execute(text("SELECT 1"))
-                return True
+            from sqlalchemy import text
+            session.execute(text("SELECT 1"))
+            session.commit()
+            return True
         except Exception as e:
             logger.error(f"Ping failed: {e}")
             return False
+        finally:
+            session.close()
