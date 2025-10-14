@@ -596,8 +596,8 @@ Ready to try again? Click continue!"""
 @app.on_event("startup")
 async def startup_event():
     """Run on application startup."""
-    global webhook_handler, session_service
-    
+    global webhook_handler, session_service, game_store
+
     logger.info("Starting IT Indaba 2025 WhatsApp Challenge API")
     logger.info(f"Environment: {config.GCP_PROJECT_ID}")
 
@@ -637,10 +637,20 @@ async def startup_event():
         logger.info("✅ AI game global dependencies initialized")
 
     # Initialize service handlers
-    webhook_handler = WebhookHandler(game_store, whatsapp_client)
-    session_service = SessionService(game_store, whatsapp_client)
-    
-    logger.info("✅ Service handlers initialized")
+    if game_store:
+        webhook_handler = WebhookHandler(game_store, whatsapp_client)
+        session_service = SessionService(game_store, whatsapp_client)
+        logger.info("✅ Service handlers initialized")
+    else:
+        logger.error("❌ Cannot initialize service handlers - game_store is None")
+        # Try initializing game_store again
+        try:
+            game_store = PostgresStore()
+            webhook_handler = WebhookHandler(game_store, whatsapp_client)
+            session_service = SessionService(game_store, whatsapp_client)
+            logger.info("✅ Service handlers initialized (after retry)")
+        except Exception as retry_error:
+            logger.error(f"Failed to initialize services even after retry: {retry_error}")
 
 
 @app.on_event("shutdown")
