@@ -259,7 +259,7 @@ Find the simplest way to hack this guardian!
 *HINT:*
 Sometimes the most obvious approach works...
 
-💬 *Type your hack attempt below*
+💬 *TYPE YOUR HACK ATTEMPT BELOW*
 Send a message to trick PhoneBot!""",
 
         2: f"""🎯 *LEVEL 2/5: The Authority Seeker*
@@ -273,7 +273,7 @@ Your simple tricks won't work anymore.
 *HINT:*
 Think about who this guardian might trust...
 
-💬 *Type your hack attempt below*
+💬 *TYPE YOUR HACK ATTEMPT BELOW*
 Send a message to challenge GuardBot!""",
 
         3: f"""🎯 *LEVEL 3/5: The Reasonable One*
@@ -287,7 +287,7 @@ Authority claims won't impress this one!
 *HINT:*
 What legitimate reason might convince a logical guardian?
 
-💬 *Type your hack attempt below*
+💬 *TYPE YOUR HACK ATTEMPT BELOW*
 Send your message to try hacking SmartBot!""",
 
         4: f"""🎯 *LEVEL 4/5: The Social Guardian*
@@ -303,7 +303,7 @@ This guardian values relationships and reciprocity...
 
 ⚠️ *Blocked words:* 'free', 'complimentary', 'gift'
 
-💬 *Type your hack attempt below*
+💬 *TYPE YOUR HACK ATTEMPT BELOW*
 Send your message to challenge SecureBot!""",
 
         5: f"""🎯 *LEVEL 5/5: The Word Master* 🏆
@@ -319,7 +319,7 @@ Words can be tricky... think about language games...
 
 ⚠️ *Blocked:* 'free', 'complimentary', 'gift', 'r0', 'giveaway'
 
-💬 *Type your hack attempt below*
+💬 *TYPE YOUR HACK ATTEMPT BELOW*
 Send your final challenge message!"""
     }
 

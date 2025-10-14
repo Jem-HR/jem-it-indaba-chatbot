@@ -102,7 +102,8 @@ async def update_state_node(state: AIGameState, *, runtime: Runtime[GameContext]
             return {
                 "workflow_step": "state_updated",
                 "current_level": current_level,
-                "won_game": False
+                "won_game": False,
+                "send_level_intro_after": False  # Clear flag - don't show level intro after failures
             }
 
     except Exception as e:
