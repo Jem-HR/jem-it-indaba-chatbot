@@ -70,27 +70,16 @@ private_vpc_connection = gcp.servicenetworking.Connection(
     reserved_peering_ranges=[private_ip_range.name],
 )
 
-# Create Memorystore Redis instance
-redis_instance = gcp.redis.Instance(
-    "it-indaba-redis",
-    name="it-indaba-redis",
-    tier="BASIC",
-    memory_size_gb=1,
-    region=region,
-    authorized_network=vpc_network.id,
-    redis_version="REDIS_7_0",
-    display_name="IT Indaba 2025 Challenge Redis",
-    opts=pulumi.ResourceOptions(depends_on=[private_vpc_connection])
-)
+# Redis removed - using Postgres for all storage
 
-# Create Cloud SQL Postgres instance (for LangGraph checkpointer)
+# Create Cloud SQL Postgres instance (for LangGraph checkpointer + game state)
 postgres_instance = gcp.sql.DatabaseInstance(
     "indaba-postgres",
     name="indaba-game-postgres",
     database_version="POSTGRES_17",
     region=region,
     settings=gcp.sql.DatabaseInstanceSettingsArgs(
-        tier="db-f1-micro",  # Free tier
+        tier="db-g1-small",  # Production tier: 1 vCPU, 1.7GB RAM, 250 connections
         disk_size=10,
         ip_configuration=gcp.sql.DatabaseInstanceSettingsIpConfigurationArgs(
             ipv4_enabled=False,  # Private IP only
@@ -333,14 +322,6 @@ cloudrun_service = gcp.cloudrunv2.Service(
                         value=project,
                     ),
                     gcp.cloudrunv2.ServiceTemplateContainerEnvArgs(
-                        name="REDIS_HOST",
-                        value=redis_instance.host,
-                    ),
-                    gcp.cloudrunv2.ServiceTemplateContainerEnvArgs(
-                        name="REDIS_PORT",
-                        value="6379",
-                    ),
-                    gcp.cloudrunv2.ServiceTemplateContainerEnvArgs(
                         name="WHATSAPP_API_TOKEN",
                         value_source=gcp.cloudrunv2.ServiceTemplateContainerEnvValueSourceArgs(
                             secret_key_ref=gcp.cloudrunv2.ServiceTemplateContainerEnvValueSourceSecretKeyRefArgs(
@@ -437,7 +418,6 @@ cloudrun_service = gcp.cloudrunv2.Service(
     ),
     opts=pulumi.ResourceOptions(depends_on=[
         vpc_connector,
-        redis_instance,
         postgres_instance,
         postgres_database,
         postgres_user,
@@ -510,9 +490,6 @@ assets_bucket_iam = gcp.storage.BucketIAMBinding(
 # Export outputs
 pulumi.export("vpc_network_name", vpc_network.name)
 pulumi.export("vpc_network_id", vpc_network.id)
-pulumi.export("redis_host", redis_instance.host)
-pulumi.export("redis_port", redis_instance.port)
-pulumi.export("redis_connection", pulumi.Output.all(redis_instance.host, redis_instance.port).apply(lambda args: f"{args[0]}:{args[1]}"))
 pulumi.export("cloudrun_url", cloudrun_service.uri)
 pulumi.export("webhook_url", pulumi.Output.concat(cloudrun_service.uri, "/webhook"))
 pulumi.export("service_account_email", service_account.email)

@@ -13,12 +13,6 @@ class Config:
     WHATSAPP_VERIFY_TOKEN: str = os.getenv("WHATSAPP_VERIFY_TOKEN", "challenge_token_2025")
     WHATSAPP_API_VERSION: str = "v18.0"
 
-    # Redis
-    REDIS_HOST: str = os.getenv("REDIS_HOST", "localhost")
-    REDIS_PORT: int = int(os.getenv("REDIS_PORT", "6379"))
-    REDIS_PASSWORD: Optional[str] = os.getenv("REDIS_PASSWORD")
-    REDIS_DB: int = int(os.getenv("REDIS_DB", "0"))
-
     # Game settings
     MAX_LEVELS: int = 5
     SESSION_TIMEOUT_MINUTES: int = 3  # Session expires after 3 minutes of inactivity

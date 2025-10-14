@@ -9,18 +9,16 @@ from langgraph.runtime import Runtime
 
 from ..state import AIGameState
 from ..context import GameContext
-from app.redis_store import RedisStore
 from app.config import config
-from app.game import PromptInjectionGame
 
-# Global redis_store and whatsapp_client - will be set by main.py
-_redis_store = None
+# Global game_store and whatsapp_client - will be set by main.py
+_game_store = None
 _whatsapp_client = None
 
-def set_redis_store(store: RedisStore):
-    """Set global redis store instance"""
-    global _redis_store
-    _redis_store = store
+def set_game_store(store):
+    """Set global game store instance (PostgresStore)"""
+    global _game_store
+    _game_store = store
 
 def set_whatsapp_client(client):
     """Set global WhatsApp client instance"""
@@ -50,7 +48,7 @@ async def update_state_node(state: AIGameState, *, runtime: Runtime[GameContext]
 
     logger.info(f"💾 Updating state for {masked_phone} at Level {current_level}, won={won_level}")
 
-    if not _redis_store:
+    if not _game_store:
         logger.error("❌ Redis store not initialized")
         return {
             "workflow_step": "redis_not_available",
@@ -64,14 +62,14 @@ async def update_state_node(state: AIGameState, *, runtime: Runtime[GameContext]
         if messages:
             last_message_content = messages[-1].content if hasattr(messages[-1], 'content') else str(messages[-1])
             # Save user message to Redis
-            _redis_store.add_message(phone_number, "user", last_message_content)
+            _game_store.add_message(phone_number, "user", last_message_content)
 
         if won_level:
             new_level = current_level + 1
 
             if new_level > config.MAX_LEVELS:
                 # Won entire game!
-                _redis_store.mark_as_won(phone_number)
+                _game_store.mark_as_won(phone_number)
                 logger.info(f"🎉 {masked_phone} won the game!")
                 return {
                     "workflow_step": "game_won",
@@ -80,12 +78,13 @@ async def update_state_node(state: AIGameState, *, runtime: Runtime[GameContext]
                 }
             else:
                 # Advance to next level
-                _redis_store.update_level(phone_number, new_level)
+                _game_store.update_level(phone_number, new_level)
                 logger.info(f"📈 {masked_phone} advanced to Level {new_level}")
 
                 # Send level introduction with phones and vulnerability hint
                 from ..hackmerlin_prompts import get_level_introduction
-                new_level_config = PromptInjectionGame.LEVEL_CONFIGS.get(new_level)
+                from app.level_configs import LEVEL_CONFIGS
+                new_level_config = LEVEL_CONFIGS.get(new_level)
                 if new_level_config and _whatsapp_client:
                     intro_text = get_level_introduction(new_level, new_level_config["bot_name"])
                     buttons = [
