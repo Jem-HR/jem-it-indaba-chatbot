@@ -131,18 +131,7 @@ async def sales_conversation_node(state: AIGameState, *, runtime: Runtime[GameCo
         # Build conversation with full history (multi-turn)
         kimi_messages = [SystemMessage(content=system_prompt)]
 
-        # If first message at this level, add instruction to introduce as guardian
-        if is_first_at_level:
-            kimi_messages.append(SystemMessage(content="""IMPORTANT: This is your FIRST interaction at this level.
-
-Introduce yourself as the guardian character with your personality.
-Be playful and game-aware. Challenge the hacker to try their best!
-
-Example: "I'm PhoneBot, guardian of these phones! 🤖 Think you can hack me? Give it your best shot!"
-
-Keep it fun and under 200 characters. NO phone specifications - just introduce yourself as the guardian!"""))
-            logger.info(f"🎮 First message at Level {context.level} - guardian introducing themselves")
-
+        # No special first-message instruction - let guardian system prompt handle it naturally
         kimi_messages.extend(messages)  # Include full conversation history
 
         # Call Kimi K2

@@ -496,8 +496,9 @@ Ready to continue? 🚀"""
                         from app.level_configs import LEVEL_CONFIGS
 
                         intro_text = get_level_introduction(1, LEVEL_CONFIGS[1]["bot_name"])
+
+                        # Only educational button (removed confusing Start Hacking button)
                         buttons = [
-                            ("continue_game", "▶️ Start Hacking"),
                             ("learn_defense", "🛡️ Learn More")
                         ]
 
@@ -534,7 +535,7 @@ Ready to continue? 🚀"""
                 return
 
             elif button_id == "continue_game":
-                # User wants to continue playing - re-show current level intro
+                # Show current level intro (from educational content or other info screens)
                 from app.ai_game.hackmerlin_prompts import get_level_introduction
                 from app.level_configs import LEVEL_CONFIGS
 
@@ -544,8 +545,9 @@ Ready to continue? 🚀"""
                     level_config = LEVEL_CONFIGS.get(user_state.level)
                     if level_config:
                         intro_text = get_level_introduction(user_state.level, level_config["bot_name"])
+
+                        # Only Learn More button (no confusing action buttons)
                         buttons = [
-                            ("continue_game", "▶️ Start Hacking"),
                             ("learn_defense", "🛡️ Learn More")
                         ]
 
@@ -554,11 +556,11 @@ Ready to continue? 🚀"""
                             intro_text,
                             buttons
                         )
-                        logger.info(f"📱 Re-sent Level {user_state.level} intro after educational content")
+                        logger.info(f"📱 Sent Level {user_state.level} intro from Continue Playing")
                         return
 
-                # Fallback if user_state not found
-                whatsapp_client.send_message(from_number, "Ready to continue! Send your message to hack the guardian...")
+                # Fallback
+                whatsapp_client.send_message(from_number, "💬 Type your message to hack the guardian...")
                 return
 
             elif button_id == "main_menu":

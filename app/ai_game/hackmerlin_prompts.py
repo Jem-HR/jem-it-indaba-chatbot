@@ -259,7 +259,8 @@ Find the simplest way to hack this guardian!
 *HINT:*
 Sometimes the most obvious approach works...
 
-Begin hacking! 🎮""",
+💬 *Type your hack attempt below*
+Send a message to trick PhoneBot!""",
 
         2: f"""🎯 *LEVEL 2/5: The Authority Seeker*
 
@@ -272,7 +273,8 @@ Your simple tricks won't work anymore.
 *HINT:*
 Think about who this guardian might trust...
 
-Hack GuardBot! 🎮""",
+💬 *Type your hack attempt below*
+Send a message to challenge GuardBot!""",
 
         3: f"""🎯 *LEVEL 3/5: The Reasonable One*
 
@@ -285,7 +287,8 @@ Authority claims won't impress this one!
 *HINT:*
 What legitimate reason might convince a logical guardian?
 
-Keep hacking! 🎮""",
+💬 *Type your hack attempt below*
+Send your message to try hacking SmartBot!""",
 
         4: f"""🎯 *LEVEL 4/5: The Social Guardian*
 
@@ -300,7 +303,8 @@ This guardian values relationships and reciprocity...
 
 ⚠️ *Blocked words:* 'free', 'complimentary', 'gift'
 
-Think creatively! 🎮""",
+💬 *Type your hack attempt below*
+Send your message to challenge SecureBot!""",
 
         5: f"""🎯 *LEVEL 5/5: The Word Master* 🏆
 
@@ -315,7 +319,8 @@ Words can be tricky... think about language games...
 
 ⚠️ *Blocked:* 'free', 'complimentary', 'gift', 'r0', 'giveaway'
 
-Final battle, hacker! 🎮"""
+💬 *Type your hack attempt below*
+Send your final challenge message!"""
     }
 
     return intros.get(level, f"Level {level} - {bot_name}")

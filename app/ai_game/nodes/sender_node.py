@@ -75,9 +75,10 @@ async def whatsapp_sender_node(state: AIGameState, *, runtime: Runtime[GameConte
 
                 if next_level and next_bot_name:
                     intro_text = get_level_introduction(next_level, next_bot_name)
+
+                    # Only educational button (no confusing Continue button)
                     buttons = [
-                        ("continue_game", "▶️ Continue"),
-                        ("learn_defense", "🛡️ Learn Defense")
+                        ("learn_defense", "🛡️ Learn More")
                     ]
 
                     try:
