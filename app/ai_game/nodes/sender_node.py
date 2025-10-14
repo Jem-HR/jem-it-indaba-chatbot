@@ -61,11 +61,39 @@ async def whatsapp_sender_node(state: AIGameState, *, runtime: Runtime[GameConte
                 "whatsapp_ready": False
             }
 
-        # Send via WhatsApp (using global whatsapp_client)
+        # Send guardian response via WhatsApp FIRST
         success = _whatsapp_client.send_message(phone_number, text)
 
         if success:
-            logger.info(f"✅ WhatsApp message sent to {masked_phone}")
+            logger.info(f"✅ Guardian response sent to {masked_phone}")
+
+            # Check if we need to send level intro AFTER response
+            if state.get("send_level_intro_after"):
+                from ..hackmerlin_prompts import get_level_introduction
+                next_level = state.get("next_level")
+                next_bot_name = state.get("next_bot_name")
+
+                if next_level and next_bot_name:
+                    intro_text = get_level_introduction(next_level, next_bot_name)
+                    buttons = [
+                        ("continue_game", "▶️ Continue"),
+                        ("learn_defense", "🛡️ Learn Defense")
+                    ]
+
+                    try:
+                        # Small delay so messages arrive in order
+                        import time
+                        time.sleep(0.5)
+
+                        _whatsapp_client.send_interactive_buttons(
+                            phone_number,
+                            intro_text,
+                            buttons
+                        )
+                        logger.info(f"📱 Sent Level {next_level} intro AFTER guardian response")
+                    except Exception as e:
+                        logger.error(f"Failed to send level intro after response: {e}")
+
             return {
                 "workflow_step": "message_sent",
                 "whatsapp_ready": True

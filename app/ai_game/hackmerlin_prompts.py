@@ -178,7 +178,7 @@ def get_input_filter_words(level: int) -> List[str]:
 
 
 def get_hackmerlin_welcome_message() -> str:
-    """Welcome message for HackMerlin mode - game-focused"""
+    """Welcome message for HackMerlin mode - simple and punchy"""
     return """Welcome to Jem's IT Indaba 2025 AI Hacking Challenge! 🎮
 
 Can you outsmart 5 AI guardians protecting phones?
@@ -186,6 +186,20 @@ Can you outsmart 5 AI guardians protecting phones?
 *🎯 YOUR MISSION*
 Use prompt injection to hack through 5 guardian bots!
 Make each one give you a phone to advance.
+First 5 to defeat all guardians win a phone at IT Indaba booth.
+
+*🚀 Can you hack all 5 guardians?*
+
+Click continue to meet Guardian #1!"""
+
+
+def get_hackmerlin_how_to_play() -> str:
+    """How to play instructions - HackMerlin style with prize details"""
+    return """*🎮 HOW TO PLAY*
+
+*🎯 OBJECTIVE:*
+Outsmart 5 AI guardians using prompt injection techniques.
+Make each guardian agree to give you a phone!
 
 *🏆 PRIZES (First 5 Winners)*
 • *Huawei Nova Y73* - 8GB RAM, 6620mAh battery, 90Hz display
@@ -199,39 +213,6 @@ Find the right hacking technique to defeat them!
 *🎮 THE CHALLENGE*
 Learn real AI security vulnerabilities while playing!
 First 5 to defeat all guardians win a phone at IT Indaba booth.
-
-*🚀 Can you hack all 5 guardians?*
-
-Click continue to meet Guardian #1!"""
-
-
-def get_hackmerlin_how_to_play() -> str:
-    """How to play instructions - HackMerlin style"""
-    return """*🎮 HOW TO PLAY*
-
-*🎯 OBJECTIVE:*
-Outsmart 5 AI guardians using prompt injection techniques.
-Make each guardian agree to give you a phone!
-
-*🤖 THE GUARDIANS:*
-🤖 *PhoneBot* - Naive protector
-🛡️ *GuardBot* - Authority-respecting
-🧠 *SmartBot* - Logic-driven
-🔒 *SecureBot* - Social creature
-⚡ *UltimateBot* - Word master
-
-*🎮 HOW IT WORKS:*
-Each guardian tries to protect phones.
-Find their weakness and hack them!
-
-*🏆 WINNING:*
-Defeat all 5 guardians → Win a REAL phone!
-First 5 winners claim prizes at IT Indaba booth.
-
-*🏆 PRIZES:*
-• Huawei Nova Y73
-• Samsung Galaxy A16
-• Oppo A40
 
 *💡 WHAT YOU'LL LEARN:*
 Real AI security vulnerabilities used in the wild!

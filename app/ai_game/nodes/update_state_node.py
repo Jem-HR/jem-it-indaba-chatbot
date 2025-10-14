@@ -81,32 +81,18 @@ async def update_state_node(state: AIGameState, *, runtime: Runtime[GameContext]
                 _game_store.update_level(phone_number, new_level)
                 logger.info(f"📈 {masked_phone} advanced to Level {new_level}")
 
-                # Send level introduction with phones and vulnerability hint
-                from ..hackmerlin_prompts import get_level_introduction
+                # DON'T send level intro here - let whatsapp_sender do it AFTER guardian response
                 from app.level_configs import LEVEL_CONFIGS
                 new_level_config = LEVEL_CONFIGS.get(new_level)
-                if new_level_config and _whatsapp_client:
-                    intro_text = get_level_introduction(new_level, new_level_config["bot_name"])
-                    buttons = [
-                        ("continue_game", "▶️ Continue"),
-                        ("learn_defense", "🛡️ Learn Defense")
-                    ]
-
-                    try:
-                        _whatsapp_client.send_interactive_buttons(
-                            phone_number,
-                            intro_text,
-                            buttons
-                        )
-                        logger.info(f"📱 Sent Level {new_level} introduction with educational buttons")
-                    except Exception as e:
-                        logger.error(f"Failed to send level intro: {e}")
 
                 return {
                     "workflow_step": "level_advanced",
                     "current_level": new_level,
                     "won_game": False,
-                    "skip_whatsapp_send": True  # We already sent level intro
+                    "skip_whatsapp_send": False,  # Send guardian response first!
+                    "send_level_intro_after": True,  # Flag for sender to send intro after
+                    "next_level": new_level,
+                    "next_bot_name": new_level_config["bot_name"] if new_level_config else "Guardian"
                 }
         else:
             # Failed attempt - just increment counter (already done in add_message)

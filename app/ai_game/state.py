@@ -37,3 +37,9 @@ class AIGameState(MessagesState):
 
     # Analytics
     conversation_id: Optional[str]  # For tracking conversation flow
+
+    # Flow control for level advancement messaging
+    skip_whatsapp_send: Optional[bool]  # Skip sender node (already sent)
+    send_level_intro_after: Optional[bool]  # Send level intro after guardian response
+    next_level: Optional[int]  # Next level number (for intro after response)
+    next_bot_name: Optional[str]  # Next bot name (for intro after response)
