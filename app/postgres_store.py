@@ -68,7 +68,7 @@ class Message(Base):
 
 
 class Winner(Base):
-    """Winner table for leaderboard"""
+    """Winner table for leaderboard and prize draw"""
     __tablename__ = 'game_winners'
 
     id = Column(Integer, primary_key=True, autoincrement=True)
@@ -76,7 +76,11 @@ class Winner(Base):
     completed_at = Column(DateTime, default=datetime.now)
     total_attempts = Column(Integer)
     time_taken_seconds = Column(Integer)
-    rank = Column(Integer)  # 1-5 for prize eligibility
+    rank = Column(Integer)  # Order of completion
+
+    # Prize draw fields
+    preferred_phone = Column(String(50))  # User's phone choice for draw
+    draw_eligible = Column(Boolean, default=True)  # Eligible for prize draw
 
     # Relationships
     user = relationship("User", back_populates="winner")
@@ -295,7 +299,9 @@ class PostgresStore:
                     completed_at=user.last_active,
                     total_attempts=user.attempts,
                     time_taken_seconds=int(time_taken),
-                    rank=winner_count + 1
+                    rank=winner_count + 1,
+                    preferred_phone=None,  # Will be set when user selects phone
+                    draw_eligible=True
                 )
 
                 session.add(winner)
@@ -437,6 +443,26 @@ class PostgresStore:
 
             return [user.phone_number for user in users]
 
+        finally:
+            session.close()
+
+    def set_phone_preference(self, phone_number: str, phone_choice: str) -> bool:
+        """Save user's preferred phone for prize draw"""
+        session = self._get_session()
+        try:
+            winner = session.query(Winner).filter(Winner.phone_number == phone_number).first()
+
+            if winner:
+                winner.preferred_phone = phone_choice
+                session.commit()
+                logger.info(f"💎 {phone_number[:5]}*** selected {phone_choice}")
+                return True
+            return False
+
+        except Exception as e:
+            session.rollback()
+            logger.error(f"Failed to set phone preference: {e}")
+            return False
         finally:
             session.close()
 

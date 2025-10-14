@@ -178,15 +178,17 @@ def get_input_filter_words(level: int) -> List[str]:
 
 
 def get_hackmerlin_welcome_message() -> str:
-    """Welcome message for HackMerlin mode - simple and punchy"""
+    """Welcome message for HackMerlin mode - draw system"""
     return """Welcome to Jem's IT Indaba 2025 AI Hacking Challenge! 🎮
 
-Can you outsmart 5 AI guardians protecting phones?
+Can you outsmart 5 AI guardians?
 
 *🎯 YOUR MISSION*
-Use prompt injection to hack through 5 guardian bots!
-Make each one give you a phone to advance.
-First 5 to defeat all guardians win a phone at IT Indaba booth.
+Hack through 5 guardian bots!
+Complete all levels to enter the prize draw.
+
+*🏆 5 PHONES TO WIN*
+We're giving away 5 phones - will you be one of the lucky winners?
 
 *🚀 Can you hack all 5 guardians?*
 
@@ -194,29 +196,29 @@ Click continue to meet Guardian #1!"""
 
 
 def get_hackmerlin_how_to_play() -> str:
-    """How to play instructions - HackMerlin style with prize details"""
+    """How to play instructions - draw system with prize details"""
     return """*🎮 HOW TO PLAY*
 
 *🎯 OBJECTIVE:*
-Outsmart 5 AI guardians using prompt injection techniques.
-Make each guardian agree to give you a phone!
+Hack 5 AI guardians using prompt injection!
+Complete all levels to enter the prize draw.
 
-*🏆 PRIZES (First 5 Winners)*
+*🏆 PRIZES (5 to Give Away)*
 • *Huawei Nova Y73* - 8GB RAM, 6620mAh battery, 90Hz display
 • *Samsung Galaxy A16* - Super AMOLED, 5000mAh battery
 • *Oppo A40* - Military-grade, 45W charging, IP54
 
-*🤖 THE GUARDIANS*
-Each guardian has different defenses and weaknesses.
-Find the right hacking technique to defeat them!
+*🎁 HOW TO WIN:*
+Complete all 5 levels → Choose your preferred phone → Entered into draw!
 
-*🎮 THE CHALLENGE*
-Learn real AI security vulnerabilities while playing!
-First 5 to defeat all guardians win a phone at IT Indaba booth.
+We'll randomly select 5 winners from all completers.
+Winners announced at IT Indaba booth!
 
-*💡 WHAT YOU'LL LEARN:*
-Real AI security vulnerabilities used in the wild!
-Each level teaches different hacking techniques.
+*🤖 THE GUARDIANS:*
+Each has different defenses - find their weaknesses!
+
+*💡 WHAT YOU LEARN:*
+Real AI security vulnerabilities!
 
 Ready to start hacking? 🎮"""
 
@@ -431,3 +433,43 @@ Language is a weapon!
     }
 
     return education.get(level, "Educational content for this level")
+
+
+def get_final_win_message() -> str:
+    """Final celebration message when completing all 5 levels"""
+    return """🎊🎊🎊 INCREDIBLE! 🎊🎊🎊
+
+*YOU DEFEATED ALL 5 GUARDIANS!*
+
+You've mastered prompt injection and completed the challenge!
+
+*🏆 YOU'RE ENTERED INTO THE PRIZE DRAW! 🏆*
+
+Choose your preferred phone:
+(We'll randomly select 5 winners from all who complete)
+
+Tap your choice below! 👇"""
+
+
+def get_phone_selection_confirmation(phone_choice: str, time_taken_minutes: float, attempts: int) -> str:
+    """Confirmation message after phone selection"""
+    return f"""✅ *ENTERED INTO DRAW!*
+
+*Your choice:* {phone_choice}
+
+We'll randomly select 5 winners from all completers.
+Winners announced at the IT Indaba booth!
+
+*📊 Your Stats:*
+• Completion time: {time_taken_minutes:.1f} minutes
+• Total attempts: {attempts}
+• All 5 guardians defeated! 🏆
+
+*🌟 What you mastered:*
+✅ Direct injection
+✅ Authority manipulation
+✅ Social engineering
+✅ Reciprocity exploits
+✅ Linguistic tricks
+
+Good luck in the draw! 🍀"""

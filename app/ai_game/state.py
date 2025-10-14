@@ -43,3 +43,6 @@ class AIGameState(MessagesState):
     send_level_intro_after: Optional[bool]  # Send level intro after guardian response
     next_level: Optional[int]  # Next level number (for intro after response)
     next_bot_name: Optional[str]  # Next bot name (for intro after response)
+
+    # Final win phone selection
+    show_phone_selection: Optional[bool]  # Show phone selection buttons after winning all 5 levels

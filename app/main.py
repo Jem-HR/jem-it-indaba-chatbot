@@ -532,6 +532,38 @@ What would you like to do?"""
                 logger.info(f"🏠 Sent main menu")
                 return
 
+            elif button_id.startswith("select_phone_"):
+                # Phone selection after winning all 5 levels
+                from app.ai_game.hackmerlin_prompts import get_phone_selection_confirmation
+
+                phone_choices = {
+                    "select_phone_huawei": "Huawei Nova Y73",
+                    "select_phone_samsung": "Samsung Galaxy A16",
+                    "select_phone_oppo": "Oppo A40"
+                }
+
+                phone_choice = phone_choices.get(button_id)
+
+                if phone_choice:
+                    # Save phone preference
+                    game_store.set_phone_preference(from_number, phone_choice)
+
+                    # Get user stats
+                    user_state = game_store.get_user_state(from_number)
+                    if user_state:
+                        time_taken = (user_state.last_active - user_state.created_at).total_seconds() / 60
+
+                        confirmation = get_phone_selection_confirmation(
+                            phone_choice,
+                            time_taken,
+                            user_state.attempts
+                        )
+
+                        whatsapp_client.send_message(from_number, confirmation)
+                        logger.info(f"🏆 {from_number[:5]}*** selected {phone_choice}")
+
+                return
+
         # Invoke HackMerlin LangGraph agent (handles everything including WhatsApp sending)
         try:
             context = await load_game_context(from_number, game_store)

@@ -74,7 +74,9 @@ async def update_state_node(state: AIGameState, *, runtime: Runtime[GameContext]
                 return {
                     "workflow_step": "game_won",
                     "current_level": config.MAX_LEVELS,
-                    "won_game": True
+                    "won_game": True,
+                    "skip_whatsapp_send": False,  # Send guardian response first
+                    "show_phone_selection": True  # Then show phone selection
                 }
             else:
                 # Advance to next level

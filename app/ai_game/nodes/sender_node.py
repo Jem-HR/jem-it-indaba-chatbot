@@ -94,6 +94,30 @@ async def whatsapp_sender_node(state: AIGameState, *, runtime: Runtime[GameConte
                     except Exception as e:
                         logger.error(f"Failed to send level intro after response: {e}")
 
+            # Check if we need to show phone selection (game won!)
+            if state.get("show_phone_selection"):
+                from ..hackmerlin_prompts import get_final_win_message
+
+                try:
+                    import time
+                    time.sleep(0.5)  # Delay
+
+                    win_message = get_final_win_message()
+                    phone_buttons = [
+                        ("select_phone_huawei", "Huawei Nova Y73 🔋"),
+                        ("select_phone_samsung", "Samsung A16 📱"),
+                        ("select_phone_oppo", "Oppo A40 💪")
+                    ]
+
+                    _whatsapp_client.send_interactive_buttons(
+                        phone_number,
+                        win_message,
+                        phone_buttons
+                    )
+                    logger.info(f"🏆 Sent final win message with phone selection")
+                except Exception as e:
+                    logger.error(f"Failed to send phone selection: {e}")
+
             return {
                 "workflow_step": "message_sent",
                 "whatsapp_ready": True
