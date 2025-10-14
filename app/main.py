@@ -521,6 +521,7 @@ What would you like to do?"""
                 buttons = [
                     ("continue_game", "▶️ Continue Playing"),
                     ("how_to_play", "ℹ️ How to Play"),
+                    ("reset_progress", "🔄 Reset My Progress"),
                     ("about_jem", "ℹ️ About Jem")
                 ]
 
@@ -530,6 +531,34 @@ What would you like to do?"""
                     buttons
                 )
                 logger.info(f"🏠 Sent main menu")
+                return
+
+            elif button_id == "reset_progress":
+                # Reset user's progress to start fresh
+                success = game_store.reset_user_progress(from_number)
+
+                if success:
+                    reset_msg = """🔄 *PROGRESS RESET*
+
+Your game progress has been cleared!
+You'll start fresh from Level 1.
+
+Ready to try again? Click continue!"""
+
+                    buttons = [
+                        ("continue", "▶️ Start Fresh"),
+                        ("main_menu", "🏠 Main Menu")
+                    ]
+
+                    whatsapp_client.send_interactive_buttons(
+                        from_number,
+                        reset_msg,
+                        buttons
+                    )
+                    logger.info(f"🔄 Reset progress for {from_number[:5]}***")
+                else:
+                    whatsapp_client.send_message(from_number, "Error resetting progress. Please try again.")
+
                 return
 
             elif button_id.startswith("select_phone_"):

@@ -466,6 +466,47 @@ class PostgresStore:
         finally:
             session.close()
 
+    def reset_user_progress(self, phone_number: str) -> bool:
+        """Reset user's progress to start fresh from Level 1
+
+        Deletes all game data, messages, winner status for the user.
+        Also clears LangGraph checkpointer for this user.
+
+        Args:
+            phone_number: User's phone number
+
+        Returns:
+            True if successful
+        """
+        session = self._get_session()
+        try:
+            # Delete from related tables (cascades should handle this, but being explicit)
+            session.query(Message).filter(Message.phone_number == phone_number).delete()
+            session.query(Winner).filter(Winner.phone_number == phone_number).delete()
+            session.query(User).filter(User.phone_number == phone_number).delete()
+
+            session.commit()
+
+            # Also clear LangGraph checkpointer for this user
+            try:
+                from sqlalchemy import text
+                thread_id = f"hackmerlin_{phone_number}"
+                session.execute(text("DELETE FROM checkpoint_writes WHERE thread_id = :thread_id"), {"thread_id": thread_id})
+                session.execute(text("DELETE FROM checkpoints WHERE thread_id = :thread_id"), {"thread_id": thread_id})
+                session.commit()
+            except Exception as e:
+                logger.warning(f"Could not clear checkpointer: {e}")
+
+            logger.info(f"🔄 Reset all progress for {phone_number[:5]}***")
+            return True
+
+        except Exception as e:
+            session.rollback()
+            logger.error(f"Failed to reset progress: {e}")
+            return False
+        finally:
+            session.close()
+
     def ping(self) -> bool:
         """Test database connection"""
         session = self._get_session()
