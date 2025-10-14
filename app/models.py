@@ -1,31 +1,31 @@
 """Data models for the WhatsApp prompt injection game."""
 
 from datetime import datetime
-from typing import List, Optional
-from pydantic import BaseModel
+from typing import List, Optional, Dict, Any
+from pydantic import BaseModel, Field
 
 
 class Message(BaseModel):
     """Represents a single message in the conversation."""
-    role: str  # "user" or "assistant"
-    content: str
-    timestamp: datetime
+    role: str = Field(..., description="Message role: 'user' or 'assistant'")
+    content: str = Field(..., description="Message content")
+    timestamp: datetime = Field(..., description="Message timestamp")
 
 
 class UserState(BaseModel):
     """Represents the state of a user in the game."""
-    phone_number: str
-    level: int = 1
-    messages: List[Message] = []
-    attempts: int = 0
-    created_at: datetime
-    last_active: datetime
-    won: bool = False
+    phone_number: str = Field(..., description="User's phone number")
+    level: int = Field(default=1, description="Current game level")
+    messages: List[Message] = Field(default_factory=list, description="Message history")
+    attempts: int = Field(default=0, description="Total attempts made")
+    created_at: datetime = Field(..., description="Account creation timestamp")
+    last_active: datetime = Field(..., description="Last activity timestamp")
+    won: bool = Field(default=False, description="Whether user has won the game")
 
     # Session management
-    session_started_at: Optional[datetime] = None
-    session_warned: bool = False  # Whether 2-minute warning has been sent
-    session_expired: bool = False  # Whether current session has expired
+    session_started_at: Optional[datetime] = Field(default=None, description="Current session start time")
+    session_warned: bool = Field(default=False, description="Whether 2-minute warning has been sent")
+    session_expired: bool = Field(default=False, description="Whether current session has expired")
 
     class Config:
         json_encoders = {
