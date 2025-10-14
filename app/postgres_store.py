@@ -444,9 +444,12 @@ class PostgresStore:
         """Test database connection"""
         session = self._get_session()
         try:
-            session.execute("SELECT 1")
+            from sqlalchemy import text
+            session.execute(text("SELECT 1"))
+            session.commit()
             return True
-        except Exception:
+        except Exception as e:
+            logger.error(f"Ping failed: {e}")
             return False
         finally:
             session.close()

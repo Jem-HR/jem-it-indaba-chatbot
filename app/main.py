@@ -110,19 +110,23 @@ async def root():
 @app.get("/health")
 async def health_check():
     """Health check endpoint."""
+    postgres_healthy = False
     try:
         # Test Postgres connection
-        postgres_healthy = game_store.ping()
+        if game_store:
+            postgres_healthy = game_store.ping()
+        else:
+            logger.warning("game_store not initialized")
     except Exception as e:
         logger.error(f"Postgres health check failed: {e}")
-        postgres_healthy = False
 
     return {
         "status": "healthy" if postgres_healthy else "degraded",
         "timestamp": datetime.now().isoformat(),
         "services": {
             "postgres": "up" if postgres_healthy else "down",
-            "whatsapp": "configured" if config.WHATSAPP_API_TOKEN else "not configured"
+            "whatsapp": "configured" if config.WHATSAPP_API_TOKEN else "not configured",
+            "game_store_initialized": game_store is not None
         }
     }
 
