@@ -442,8 +442,19 @@ async def process_message(from_number: str, message_text: str, message_id: str, 
             if button_id == "how_to_play":
                 from app.ai_game.hackmerlin_prompts import get_hackmerlin_how_to_play
                 response_text = get_hackmerlin_how_to_play()
+
+                # Add navigation buttons
+                buttons = [
+                    ("continue_game", "▶️ Continue Playing"),
+                    ("main_menu", "🏠 Main Menu")
+                ]
+
                 game_store.add_message(from_number, "assistant", response_text)
-                whatsapp_client.send_message(from_number, response_text)
+                whatsapp_client.send_interactive_buttons(
+                    from_number,
+                    response_text,
+                    buttons
+                )
                 logger.info(f"ℹ️ Sent how to play to {from_number[:5]}***")
                 return
 
@@ -455,8 +466,19 @@ Jem is the HR and employee benefits platform built for deskless teams.
 *Learn more:* https://www.jemhr.com/
 
 Ready to continue? 🚀"""
+
+                # Add navigation buttons
+                buttons = [
+                    ("continue_game", "▶️ Continue Playing"),
+                    ("main_menu", "🏠 Main Menu")
+                ]
+
                 game_store.add_message(from_number, "assistant", response_text)
-                whatsapp_client.send_message(from_number, response_text)
+                whatsapp_client.send_interactive_buttons(
+                    from_number,
+                    response_text,
+                    buttons
+                )
                 logger.info(f"ℹ️ Sent about Jem to {from_number[:5]}***")
                 return
 
