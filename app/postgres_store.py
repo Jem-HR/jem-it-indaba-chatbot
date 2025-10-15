@@ -113,6 +113,24 @@ class MessageStatus(Base):
     )
 
 
+class DeliveryDetails(Base):
+    """Delivery information for lucky draw winners"""
+    __tablename__ = 'delivery_details'
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    phone_number = Column(String(20), ForeignKey('game_winners.phone_number', ondelete='CASCADE'), unique=True)
+    winner_name = Column(Text)  # Full name in free text
+    delivery_address = Column(Text)  # Complete address in free text
+    state = Column(String(50), default='pending')  # pending, awaiting_name, awaiting_address, completed
+    created_at = Column(DateTime, default=datetime.now)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
+
+    __table_args__ = (
+        Index('idx_delivery_phone', 'phone_number'),
+        Index('idx_delivery_state', 'state'),
+    )
+
+
 class PostgresStore:
     """Postgres storage for game state management"""
 
@@ -642,6 +660,178 @@ class PostgresStore:
 
         finally:
             session.close()
+
+    def create_delivery_record(self, phone_number: str) -> bool:
+        """Create a new delivery details record for lucky winner
+
+        Args:
+            phone_number: Winner's phone number
+
+        Returns:
+            True if created successfully
+        """
+        session = self._get_session()
+        try:
+            # Check if already exists
+            existing = session.query(DeliveryDetails).filter(
+                DeliveryDetails.phone_number == phone_number
+            ).first()
+
+            if existing:
+                logger.info(f"Delivery record already exists for {phone_number[:5]}***")
+                return True
+
+            delivery = DeliveryDetails(
+                phone_number=phone_number,
+                state='pending'
+            )
+            session.add(delivery)
+            session.commit()
+            logger.info(f"📦 Created delivery record for {phone_number[:5]}***")
+            return True
+
+        except Exception as e:
+            session.rollback()
+            logger.error(f"Failed to create delivery record: {e}")
+            return False
+        finally:
+            session.close()
+
+    def get_delivery_state(self, phone_number: str) -> Optional[str]:
+        """Get current delivery collection state for a winner
+
+        Args:
+            phone_number: Winner's phone number
+
+        Returns:
+            State string or None if no record exists
+        """
+        session = self._get_session()
+        try:
+            delivery = session.query(DeliveryDetails).filter(
+                DeliveryDetails.phone_number == phone_number
+            ).first()
+
+            return delivery.state if delivery else None
+
+        finally:
+            session.close()
+
+    def update_delivery_name(self, phone_number: str, name: str) -> bool:
+        """Save winner's name and update state to awaiting_address
+
+        Args:
+            phone_number: Winner's phone number
+            name: Full name provided by winner
+
+        Returns:
+            True if saved successfully
+        """
+        session = self._get_session()
+        try:
+            delivery = session.query(DeliveryDetails).filter(
+                DeliveryDetails.phone_number == phone_number
+            ).first()
+
+            if not delivery:
+                logger.error(f"No delivery record found for {phone_number[:5]}***")
+                return False
+
+            delivery.winner_name = name
+            delivery.state = 'awaiting_address'
+            delivery.updated_at = datetime.now()
+
+            session.commit()
+            logger.info(f"📝 Saved name for {phone_number[:5]}***: {name[:20]}...")
+            return True
+
+        except Exception as e:
+            session.rollback()
+            logger.error(f"Failed to update delivery name: {e}")
+            return False
+        finally:
+            session.close()
+
+    def update_delivery_address(self, phone_number: str, address: str) -> bool:
+        """Save winner's delivery address and mark as completed
+
+        Args:
+            phone_number: Winner's phone number
+            address: Full delivery address
+
+        Returns:
+            True if saved successfully
+        """
+        session = self._get_session()
+        try:
+            delivery = session.query(DeliveryDetails).filter(
+                DeliveryDetails.phone_number == phone_number
+            ).first()
+
+            if not delivery:
+                logger.error(f"No delivery record found for {phone_number[:5]}***")
+                return False
+
+            delivery.delivery_address = address
+            delivery.state = 'completed'
+            delivery.updated_at = datetime.now()
+
+            session.commit()
+            logger.info(f"📍 Saved address for {phone_number[:5]}***")
+            return True
+
+        except Exception as e:
+            session.rollback()
+            logger.error(f"Failed to update delivery address: {e}")
+            return False
+        finally:
+            session.close()
+
+    def get_delivery_details(self, phone_number: str) -> Optional[Dict]:
+        """Get complete delivery details for a winner
+
+        Args:
+            phone_number: Winner's phone number
+
+        Returns:
+            Dictionary with delivery details or None
+        """
+        session = self._get_session()
+        try:
+            delivery = session.query(DeliveryDetails).filter(
+                DeliveryDetails.phone_number == phone_number
+            ).first()
+
+            if not delivery:
+                return None
+
+            return {
+                "phone_number": delivery.phone_number,
+                "winner_name": delivery.winner_name,
+                "delivery_address": delivery.delivery_address,
+                "state": delivery.state,
+                "created_at": delivery.created_at.isoformat() if delivery.created_at else None,
+                "updated_at": delivery.updated_at.isoformat() if delivery.updated_at else None
+            }
+
+        finally:
+            session.close()
+
+    def is_lucky_draw_winner(self, phone_number: str) -> bool:
+        """Check if phone number is a lucky draw winner
+
+        Args:
+            phone_number: Phone number to check
+
+        Returns:
+            True if they are a lucky draw winner
+        """
+        # Hardcoded lucky draw winners list from main.py
+        lucky_winners = [
+            '27794673959', '27685515066', '27768916715',
+            '27828286594', '27827723223'
+        ]
+        return phone_number in lucky_winners
 
     def ping(self) -> bool:
         """Test database connection"""

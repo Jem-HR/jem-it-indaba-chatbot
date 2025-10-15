@@ -673,17 +673,82 @@ You've been randomly selected as one of the 5 lucky winners of the IT Indaba 202
 *🏆 Your Prize:*
 *{phone_choice}*
 
-*📍 Next Steps:*
-Please visit the Jem booth at IT Indaba to collect your prize!
+*📦 DELIVERY:*
+We'll deliver your prize directly to you!
 
-Bring a valid ID for verification.
+Click the button below to provide your delivery details.
 
 *🎊 You're a champion hacker AND a lucky winner!*
 
-Congratulations again from the Jem team! 🎮
+Congratulations from the Jem team! 🎮
 
 ---
 _Jem HR - Building for South Africa's deskless workforce_
+https://www.jemhr.com/"""
+
+
+def get_delivery_name_request() -> str:
+    """Ask winner for their full name"""
+    return """📝 *DELIVERY DETAILS - STEP 1/2*
+
+Please reply with your *full name* exactly as it should appear for delivery.
+
+Example: John Smith"""
+
+
+def get_delivery_address_request(name: str) -> str:
+    """Ask winner for their delivery address
+
+    Args:
+        name: Winner's name to personalize message
+
+    Returns:
+        Message requesting delivery address
+    """
+    return f"""📍 *DELIVERY DETAILS - STEP 2/2*
+
+Thanks {name}!
+
+Now please provide your *complete delivery address* in one message.
+
+Include:
+• Street address
+• City
+• Province
+• Postal code
+
+Example:
+123 Main Street
+Sandton
+Gauteng
+2196"""
+
+
+def get_delivery_confirmation(name: str, phone_choice: str) -> str:
+    """Confirmation after delivery details collected
+
+    Args:
+        name: Winner's name
+        phone_choice: Phone model they won
+
+    Returns:
+        Confirmation message
+    """
+    return f"""✅ *DELIVERY DETAILS RECEIVED!*
+
+Thank you {name}!
+
+Your delivery details have been recorded successfully.
+
+*Your Prize:* {phone_choice}
+*Delivery Time:* 7-10 business days
+
+We'll contact you if we need any clarification.
+
+Congratulations again! 🎉
+
+---
+_Jem HR_
 https://www.jemhr.com/"""
 
 

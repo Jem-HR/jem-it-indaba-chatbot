@@ -212,13 +212,16 @@ async def notify_lucky_winners(request: Request):
             message = get_lucky_draw_winner_message(choice)
 
             if send_immediately:
-                # Send via WhatsApp
-                whatsapp_msg_id = whatsapp_client.send_message(phone, message)
+                # Send via WhatsApp with button to start delivery info collection
+                buttons = [("provide_delivery_details", "📦 Provide Details")]
+                success = whatsapp_client.send_interactive_buttons(phone, message, buttons)
 
-                if whatsapp_msg_id:
-                    # Record in database with real WhatsApp message ID
-                    game_store.record_message_sent(phone, "lucky_draw_winner", whatsapp_msg_id, message)
-                    results.append({"phone": f"{phone[:5]}***", "status": "sent", "msg_id": whatsapp_msg_id[:15] + "..."})
+                if success:
+                    # Create delivery record
+                    game_store.create_delivery_record(phone)
+
+                    # Note: send_interactive_buttons auto-records message in database
+                    results.append({"phone": f"{phone[:5]}***", "status": "sent"})
                 else:
                     results.append({"phone": f"{phone[:5]}***", "status": "failed"})
             else:
@@ -305,6 +308,42 @@ async def get_message_stats():
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@app.get("/admin/delivery-details")
+async def get_all_delivery_details():
+    """Get all collected delivery details for lucky draw winners"""
+    try:
+        from app.postgres_store import DeliveryDetails
+        session = game_store._get_session()
+
+        try:
+            all_deliveries = session.query(DeliveryDetails).all()
+
+            results = []
+            for delivery in all_deliveries:
+                results.append({
+                    "phone": f"{delivery.phone_number[:5]}***{delivery.phone_number[-2:]}",
+                    "winner_name": delivery.winner_name,
+                    "delivery_address": delivery.delivery_address,
+                    "state": delivery.state,
+                    "created_at": delivery.created_at.isoformat() if delivery.created_at else None,
+                    "updated_at": delivery.updated_at.isoformat() if delivery.updated_at else None
+                })
+
+            return {
+                "total_records": len(results),
+                "completed": len([r for r in results if r["state"] == "completed"]),
+                "pending": len([r for r in results if r["state"] != "completed"]),
+                "details": results
+            }
+
+        finally:
+            session.close()
+
+    except Exception as e:
+        logger.exception(f"Error getting delivery details: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @app.post("/admin/test-winner-notification")
 async def test_winner_notification(
     phone_number: str,
@@ -337,26 +376,44 @@ async def test_winner_notification(
             raise HTTPException(status_code=400, detail="notification_type must be 'non_selected' or 'lucky_draw'")
 
         # Send message
-        whatsapp_msg_id = whatsapp_client.send_message(phone_number, message)
+        if notification_type == "lucky_draw":
+            # Send with button for delivery flow testing
+            buttons = [("provide_delivery_details", "📦 Provide Details")]
+            success = whatsapp_client.send_interactive_buttons(phone_number, message, buttons)
 
-        if whatsapp_msg_id:
-            # Record in database
-            game_store.record_message_sent(phone_number, msg_type, whatsapp_msg_id, message)
+            if success:
+                # Create test delivery record
+                game_store.create_delivery_record(phone_number)
 
-            return {
-                "status": "success",
-                "phone": f"{phone_number[:5]}***",
-                "notification_type": notification_type,
-                "whatsapp_msg_id": whatsapp_msg_id[:15] + "...",
-                "message_preview": message[:200] + "...",
-                "note": "Check /admin/message-stats to see delivery status"
-            }
+                return {
+                    "status": "success",
+                    "phone": f"{phone_number[:5]}***",
+                    "notification_type": notification_type,
+                    "message_preview": message[:200] + "...",
+                    "note": "Click button in WhatsApp to test delivery flow. Reply with name, then address."
+                }
         else:
-            return {
-                "status": "failed",
-                "phone": f"{phone_number[:5]}***",
-                "error": "Failed to send WhatsApp message"
-            }
+            # Non-selected message (no button)
+            whatsapp_msg_id = whatsapp_client.send_message(phone_number, message)
+
+            if whatsapp_msg_id:
+                # Record in database
+                game_store.record_message_sent(phone_number, msg_type, whatsapp_msg_id, message)
+
+                return {
+                    "status": "success",
+                    "phone": f"{phone_number[:5]}***",
+                    "notification_type": notification_type,
+                    "whatsapp_msg_id": whatsapp_msg_id[:15] + "...",
+                    "message_preview": message[:200] + "...",
+                    "note": "Check /admin/message-stats to see delivery status"
+                }
+
+        return {
+            "status": "failed",
+            "phone": f"{phone_number[:5]}***",
+            "error": "Failed to send WhatsApp message"
+        }
 
     except Exception as e:
         logger.exception(f"Error testing winner notification: {e}")
@@ -564,18 +621,84 @@ async def webhook(request: Request):
 
 async def process_message(from_number: str, message_text: str, message_id: str, button_id: Optional[str] = None):
     """
-    Process incoming WhatsApp message - COMPETITION CLOSED.
+    Process incoming WhatsApp message.
 
-    Only shows closed message with 2 info screens (How It Works, About Jem).
-    All game logic disabled.
+    Handles:
+    - Lucky draw winner delivery info collection
+    - Competition closed messages for everyone else
     """
     try:
-        logger.info(f"Processing message (CLOSED): {from_number[:5]}*** - button: {button_id}")
+        logger.info(f"Processing message: {from_number[:5]}*** - button: {button_id}")
 
         # Mark message as read
         whatsapp_client.mark_message_read(message_id)
 
-        # COMPETITION CLOSED - Handle only 3 screens
+        # Check if lucky draw winner collecting delivery info
+        is_lucky_winner = game_store.is_lucky_draw_winner(from_number)
+        delivery_state = game_store.get_delivery_state(from_number) if is_lucky_winner else None
+
+        if is_lucky_winner and delivery_state:
+            from app.ai_game.hackmerlin_prompts import (
+                get_delivery_name_request,
+                get_delivery_address_request,
+                get_delivery_confirmation
+            )
+            from app.postgres_store import Winner
+
+            # Handle button click to start delivery info collection
+            if button_id == "provide_delivery_details" and delivery_state == "pending":
+                # Update state to awaiting_name
+                session = game_store._get_session()
+                try:
+                    from app.postgres_store import DeliveryDetails
+                    delivery = session.query(DeliveryDetails).filter(
+                        DeliveryDetails.phone_number == from_number
+                    ).first()
+                    if delivery:
+                        delivery.state = "awaiting_name"
+                        delivery.updated_at = datetime.now()
+                        session.commit()
+                finally:
+                    session.close()
+
+                # Ask for name
+                name_msg = get_delivery_name_request()
+                whatsapp_client.send_message(from_number, name_msg)
+                logger.info(f"📝 Requested name from {from_number[:5]}***")
+                return
+
+            # Collecting name
+            elif delivery_state == "awaiting_name":
+                # Save name and ask for address
+                game_store.update_delivery_name(from_number, message_text)
+
+                address_msg = get_delivery_address_request(message_text)
+                whatsapp_client.send_message(from_number, address_msg)
+                logger.info(f"📍 Saved name, requested address from {from_number[:5]}***")
+                return
+
+            # Collecting address
+            elif delivery_state == "awaiting_address":
+                # Save address and send confirmation
+                game_store.update_delivery_address(from_number, message_text)
+
+                # Get winner info for confirmation
+                session = game_store._get_session()
+                try:
+                    winner = session.query(Winner).filter(Winner.phone_number == from_number).first()
+                    phone_choice = winner.preferred_phone if winner else "your phone"
+
+                    delivery_details = game_store.get_delivery_details(from_number)
+                    name = delivery_details.get("winner_name", "Winner") if delivery_details else "Winner"
+
+                    confirmation_msg = get_delivery_confirmation(name, phone_choice)
+                    whatsapp_client.send_message(from_number, confirmation_msg)
+                    logger.info(f"✅ Delivery info complete for {from_number[:5]}***")
+                finally:
+                    session.close()
+                return
+
+        # COMPETITION CLOSED - Handle only 3 screens for everyone else
         from app.ai_game.hackmerlin_prompts import (
             get_competition_closed_message,
             get_closed_tech_details,
@@ -618,7 +741,7 @@ async def process_message(from_number: str, message_text: str, message_id: str, 
         logger.info(f"📪 Sent competition closed message to {from_number[:5]}***")
 
     except Exception as e:
-        logger.exception(f"Error in closed message handler: {e}")
+        logger.exception(f"Error in message handler: {e}")
 
 
 # OLD GAME LOGIC COMMENTED OUT - Competition closed
