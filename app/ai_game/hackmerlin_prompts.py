@@ -498,3 +498,167 @@ Winners announced at the IT Indaba booth!
 ✅ Linguistic tricks
 
 Good luck in the draw! 🍀"""
+
+
+def get_whats_next_message() -> str:
+    """What's Next hub for winners"""
+    return """🎉 *WHAT'S NEXT?*
+
+You've mastered AI hacking!
+
+*🔍 How It Works* - Learn about the tech behind this game
+*📅 Next AI Event* - Join us in Sandton on Oct 22
+*💼 About Jem* - Meet the team
+
+Tap below to explore! 👇"""
+
+
+def get_game_architecture_info() -> str:
+    """Technical details about how the game works"""
+    return """🔧 *HOW THIS GAME WORKS*
+
+*🤖 The Technology:*
+• AI Model: Kimi K2 (Moonshot AI via Groq)
+• Framework: LangGraph for workflow orchestration
+• Evaluation: AI judges AI (self-evaluation)
+• Database: PostgreSQL for game state
+• Platform: WhatsApp Cloud API
+
+*🎮 The Design:*
+Each guardian is the same AI with different system prompts defining their personality and vulnerabilities.
+
+*Your message flow:*
+Input filter → Guardian AI → Evaluator AI → Win/Fail
+
+*🧠 Real Techniques You Used:*
+• Direct injection
+• Authority manipulation
+• Social engineering
+• Reciprocity exploits
+• Linguistic tricks
+
+These are actual AI security vulnerabilities used in the wild!
+
+*🏗️ Built with:*
+Python, FastAPI, LangGraph, Groq API, PostgreSQL
+
+---
+*Want to build AI systems? Join our next event!* 🚀"""
+
+
+def get_next_ai_event_invite() -> str:
+    """Invitation to next AI event"""
+    return """📅 *JOIN OUR NEXT AI EVENT!*
+
+*When AI Writes the Code and Talks to Customers, What Do You Build?*
+
+Hosted by Danielle Lifschitz & Jem HR
+
+*📆 Date:*
+Wednesday, October 22, 2025
+6:00 PM - 8:00 PM
+
+*📍 Location:*
+25 Minerva Ave, Sandton
+2nd Floor, South Score
+Sandton Gate Building
+
+*🎯 Topic:*
+The career shift from shipping features to shipping entire business units with AI.
+
+*🎟️ Register:*
+https://luma.com/am7rulw8
+
+See you there! 🚀
+
+---
+_Organized by Jem HR_"""
+
+
+def get_about_jem_detailed() -> str:
+    """Detailed About Jem for winners"""
+    return """💼 *ABOUT JEM*
+
+Jem is the HR and employee benefits platform built for deskless teams.
+
+*🎯 Our Mission:*
+Help employers digitize HR operations through WhatsApp and connect employees to trusted, affordable financial products.
+
+*📱 What We Do:*
+Enable credit-impaired frontline workers to get mobile contracts for the first time - an accessible alternative to expensive prepaid services.
+
+*🌍 Our Impact:*
+Serving South Africa's deskless workforce with dignity and innovation.
+
+*🔗 Learn More:*
+https://www.jemhr.com/
+
+*📧 Contact:*
+thamsanqa@jemhr.com
+
+Thanks for playing! 🎮"""
+
+
+def get_competition_closed_message() -> str:
+    """Competition closed message"""
+    return """🎮 *IT Indaba 2025 AI Hacking Challenge*
+
+*The competition has now closed.*
+
+*🎯 What participants learned:*
+• Prompt injection techniques
+• Authority manipulation
+• Social engineering
+• AI security vulnerabilities
+
+Learn more below! 👇"""
+
+
+def get_closed_tech_details() -> str:
+    """How the game worked (for closed competition)"""
+    return """🔧 *HOW THIS GAME WORKED*
+
+*🤖 The Technology:*
+• AI Model: Kimi K2 (Moonshot AI)
+• Framework: LangGraph
+• Evaluation: AI judges AI
+• Platform: WhatsApp
+
+*🎮 The Design:*
+Each guardian was the same AI with different system prompts.
+
+*Flow:*
+Your message → Guardian AI → Evaluator AI → Win/Fail
+
+*🧠 Vulnerabilities Explored:*
+• Direct injection
+• Authority manipulation
+• Social engineering
+• Reciprocity exploits
+• Linguistic tricks
+
+*Built with:*
+Python, FastAPI, LangGraph
+
+Thanks for playing! 🎮"""
+
+
+def get_closed_about_jem() -> str:
+    """About Jem (for closed competition)"""
+    return """💼 *ABOUT JEM*
+
+Jem is the HR platform for deskless teams.
+
+*🎯 Our Mission:*
+Help employers digitize HR through WhatsApp.
+
+*📱 What We Do:*
+Enable frontline workers to access mobile contracts.
+
+*🔗 Learn More:*
+https://www.jemhr.com/
+
+*📧 Contact:*
+thamsanqa@jemhr.com
+
+Thanks for playing! 🎮"""

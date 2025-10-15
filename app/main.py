@@ -357,13 +357,70 @@ async def webhook(request: Request):
 
 async def process_message(from_number: str, message_text: str, message_id: str, button_id: Optional[str] = None):
     """
-    Process incoming WhatsApp message using HackMerlin AI game.
+    Process incoming WhatsApp message - COMPETITION CLOSED.
 
-    Args:
-        from_number: Sender's phone number
-        message_text: Text content of the message
-        message_id: WhatsApp message ID
-        button_id: Optional button ID if this is a button click
+    Only shows closed message with 2 info screens (How It Works, About Jem).
+    All game logic disabled.
+    """
+    try:
+        logger.info(f"Processing message (CLOSED): {from_number[:5]}*** - button: {button_id}")
+
+        # Mark message as read
+        whatsapp_client.mark_message_read(message_id)
+
+        # COMPETITION CLOSED - Handle only 3 screens
+        from app.ai_game.hackmerlin_prompts import (
+            get_competition_closed_message,
+            get_closed_tech_details,
+            get_closed_about_jem
+        )
+
+        # Handle button navigation
+        if button_id == "closed_tech_details":
+            # Show How It Works
+            tech_msg = get_closed_tech_details()
+            buttons = [("show_closed_message", "⬅️ Back")]
+
+            whatsapp_client.send_interactive_buttons(from_number, tech_msg, buttons)
+            logger.info(f"🔧 Sent tech details (closed) to {from_number[:5]}***")
+            return
+
+        elif button_id == "closed_about_jem":
+            # Show About Jem
+            about_msg = get_closed_about_jem()
+            buttons = [("show_closed_message", "⬅️ Back")]
+
+            whatsapp_client.send_interactive_buttons(from_number, about_msg, buttons)
+            logger.info(f"💼 Sent About Jem (closed) to {from_number[:5]}***")
+            return
+
+        # Default: Show closed message (for any message or Back button)
+        closed_msg = get_competition_closed_message()
+        buttons = [
+            ("closed_tech_details", "🔍 How It Works"),
+            ("closed_about_jem", "💼 About Jem")
+        ]
+
+        whatsapp_client.send_interactive_buttons(
+            from_number,
+            closed_msg,
+            buttons,
+            header_image_url=config.OPENING_HEADER_URL
+        )
+
+        logger.info(f"📪 Sent competition closed message to {from_number[:5]}***")
+
+    except Exception as e:
+        logger.exception(f"Error in closed message handler: {e}")
+
+
+# OLD GAME LOGIC COMMENTED OUT - Competition closed
+# Keeping for reference but all below is disabled
+
+async def process_message_OLD_GAME_DISABLED(from_number: str, message_text: str, message_id: str, button_id: Optional[str] = None):
+    """
+    OLD GAME LOGIC - Disabled when competition closed.
+    Keeping for reference.
     """
     try:
         logger.info(f"Processing WhatsApp message from {from_number}: {message_text} (button: {button_id})")
@@ -639,6 +696,79 @@ Ready to try again? Click continue!"""
                         whatsapp_client.send_message(from_number, confirmation)
                         logger.info(f"🏆 {from_number[:5]}*** selected {phone_choice}")
 
+                        # Show What's Next hub after phone selection
+                        import time
+                        time.sleep(1)
+
+                        from app.ai_game.hackmerlin_prompts import get_whats_next_message
+                        whats_next_msg = get_whats_next_message()
+                        whats_next_buttons = [
+                            ("winner_tech_details", "🔍 How It Works"),
+                            ("winner_next_event", "📅 Next AI Event"),
+                            ("winner_about_jem", "💼 About Jem")
+                        ]
+
+                        whatsapp_client.send_interactive_buttons(
+                            from_number,
+                            whats_next_msg,
+                            whats_next_buttons
+                        )
+                        logger.info(f"📋 Sent What's Next hub to winner")
+
+                return
+
+            elif button_id == "show_whats_next":
+                # Return to What's Next hub (for winners)
+                from app.ai_game.hackmerlin_prompts import get_whats_next_message
+
+                whats_next_msg = get_whats_next_message()
+                buttons = [
+                    ("winner_tech_details", "🔍 How It Works"),
+                    ("winner_next_event", "📅 Next AI Event"),
+                    ("winner_about_jem", "💼 About Jem")
+                ]
+
+                whatsapp_client.send_interactive_buttons(from_number, whats_next_msg, buttons)
+                logger.info(f"📋 Showed What's Next hub")
+                return
+
+            elif button_id == "winner_tech_details":
+                # Technical architecture details
+                from app.ai_game.hackmerlin_prompts import get_game_architecture_info
+
+                tech_msg = get_game_architecture_info()
+                buttons = [
+                    ("show_whats_next", "⬅️ Back to What's Next")
+                ]
+
+                whatsapp_client.send_interactive_buttons(from_number, tech_msg, buttons)
+                logger.info(f"🔧 Sent technical details to winner")
+                return
+
+            elif button_id == "winner_next_event":
+                # Next AI event invitation
+                from app.ai_game.hackmerlin_prompts import get_next_ai_event_invite
+
+                event_msg = get_next_ai_event_invite()
+                buttons = [
+                    ("show_whats_next", "⬅️ Back to What's Next")
+                ]
+
+                whatsapp_client.send_interactive_buttons(from_number, event_msg, buttons)
+                logger.info(f"📅 Sent event invite to winner")
+                return
+
+            elif button_id == "winner_about_jem":
+                # Detailed About Jem
+                from app.ai_game.hackmerlin_prompts import get_about_jem_detailed
+
+                about_msg = get_about_jem_detailed()
+                buttons = [
+                    ("show_whats_next", "⬅️ Back to What's Next")
+                ]
+
+                whatsapp_client.send_interactive_buttons(from_number, about_msg, buttons)
+                logger.info(f"💼 Sent About Jem to winner")
                 return
 
         # Invoke HackMerlin LangGraph agent (handles everything including WhatsApp sending)
