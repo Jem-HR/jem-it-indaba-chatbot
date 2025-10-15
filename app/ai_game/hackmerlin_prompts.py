@@ -653,3 +653,54 @@ Jem is a complete HR and benefits platform for deskless teams, built on WhatsApp
 https://www.jemhr.com/
 
 Thanks for playing! 🎮"""
+
+
+def get_lucky_draw_winner_message(phone_choice: str) -> str:
+    """Message sent to lucky draw winners
+
+    Args:
+        phone_choice: The phone model they selected (e.g., "Oppo A40")
+
+    Returns:
+        Winner notification message
+    """
+    return f"""🎉🎉🎉 *CONGRATULATIONS!* 🎉🎉🎉
+
+*YOU WON THE LUCKY DRAW!*
+
+You've been randomly selected as one of the 5 lucky winners of the IT Indaba 2025 AI Hacking Challenge!
+
+*🏆 Your Prize:*
+*{phone_choice}*
+
+*📍 Next Steps:*
+Please visit the Jem booth at IT Indaba to collect your prize!
+
+Bring a valid ID for verification.
+
+*🎊 You're a champion hacker AND a lucky winner!*
+
+Congratulations again from the Jem team! 🎮
+
+---
+_Jem HR - Building for South Africa's deskless workforce_
+https://www.jemhr.com/"""
+
+
+def get_non_selected_winner_message() -> str:
+    """Message sent to winners who weren't selected in the draw
+
+    Returns:
+        Non-selected notification message
+    """
+    return """🎮 *THANK YOU FOR PLAYING!*
+
+You completed all 5 levels of the IT Indaba 2025 AI Hacking Challenge! 🏆
+
+Unfortunately, you weren't selected in the random draw for the 5 phones.
+
+*Thanks for being part of the challenge!*
+
+---
+_Jem HR - Building for South Africa's deskless workforce_
+https://www.jemhr.com/"""
