@@ -17,7 +17,7 @@ class WhatsAppClient:
         self.api_version = config.WHATSAPP_API_VERSION
         self.base_url = f"https://graph.facebook.com/{self.api_version}/{self.phone_number_id}"
 
-    def send_message(self, to: str, message: str) -> bool:
+    def send_message(self, to: str, message: str) -> Optional[str]:
         """
         Send a text message via WhatsApp.
 
@@ -26,7 +26,7 @@ class WhatsAppClient:
             message: Message text to send
 
         Returns:
-            True if successful, False otherwise
+            WhatsApp message ID if successful, None otherwise
         """
         url = f"{self.base_url}/messages"
         headers = {
@@ -46,12 +46,16 @@ class WhatsAppClient:
         try:
             response = requests.post(url, json=payload, headers=headers)
             response.raise_for_status()
-            return True
+
+            # Extract WhatsApp message ID from response
+            response_data = response.json()
+            message_id = response_data.get("messages", [{}])[0].get("id")
+            return message_id
         except requests.exceptions.RequestException as e:
             print(f"Error sending WhatsApp message: {e}")
             if hasattr(e, 'response') and e.response is not None:
                 print(f"Response: {e.response.text}")
-            return False
+            return None
 
     def send_image_message(self, to: str, image_url: str, caption: Optional[str] = None) -> bool:
         """

@@ -573,7 +573,8 @@ class PostgresStore:
                 logger.info(f"✅ Updated message {whatsapp_message_id[:10]}... to {status}")
                 return True
 
-            logger.warning(f"Message {whatsapp_message_id[:10]}... not found in database")
+            # Silently ignore non-tracked messages (regular game messages, not winner notifications)
+            logger.debug(f"Message {whatsapp_message_id[:10]}... not tracked (regular game message)")
             return False
 
         except Exception as e:

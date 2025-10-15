@@ -210,13 +210,12 @@ async def notify_lucky_winners(request: Request):
 
             if send_immediately:
                 # Send via WhatsApp
-                success = whatsapp_client.send_message(phone, message)
+                whatsapp_msg_id = whatsapp_client.send_message(phone, message)
 
-                if success:
-                    # Record in database
-                    msg_id = f"lucky_{phone}_{int(time.time())}"
-                    game_store.record_message_sent(phone, "lucky_draw_winner", msg_id, message)
-                    results.append({"phone": f"{phone[:5]}***", "status": "sent"})
+                if whatsapp_msg_id:
+                    # Record in database with real WhatsApp message ID
+                    game_store.record_message_sent(phone, "lucky_draw_winner", whatsapp_msg_id, message)
+                    results.append({"phone": f"{phone[:5]}***", "status": "sent", "msg_id": whatsapp_msg_id[:15] + "..."})
                 else:
                     results.append({"phone": f"{phone[:5]}***", "status": "failed"})
             else:
@@ -268,12 +267,11 @@ async def notify_non_selected(send_immediately: bool = False):
                 phone = winner.phone_number
 
                 if send_immediately:
-                    success = whatsapp_client.send_message(phone, message)
+                    whatsapp_msg_id = whatsapp_client.send_message(phone, message)
 
-                    if success:
-                        msg_id = f"non_selected_{phone}_{int(time.time())}"
-                        game_store.record_message_sent(phone, "non_selected_winner", msg_id, message)
-                        results.append({"phone": f"{phone[:5]}***", "status": "sent"})
+                    if whatsapp_msg_id:
+                        game_store.record_message_sent(phone, "non_selected_winner", whatsapp_msg_id, message)
+                        results.append({"phone": f"{phone[:5]}***", "status": "sent", "msg_id": whatsapp_msg_id[:15] + "..."})
                     else:
                         results.append({"phone": f"{phone[:5]}***", "status": "failed"})
                 else:
@@ -396,9 +394,9 @@ Your session will expire in *1 minute* if you don't respond!
 Don't worry - you can always start again from where you left off. But let's keep the momentum going! 💪
 
 Send any message to keep your session active! 🎮"""
-                success = whatsapp_client.send_message(phone_number, warning_msg)
+                whatsapp_msg_id = whatsapp_client.send_message(phone_number, warning_msg)
 
-                if success:
+                if whatsapp_msg_id:
                     game_store.mark_session_warned(phone_number)
                     warnings_sent += 1
                     logger.info(f"✅ Sent inactivity warning to {phone_number}")
