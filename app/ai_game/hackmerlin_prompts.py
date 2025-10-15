@@ -647,18 +647,9 @@ def get_closed_about_jem() -> str:
     """About Jem (for closed competition)"""
     return """💼 *ABOUT JEM*
 
-Jem is the HR platform for deskless teams.
-
-*🎯 Our Mission:*
-Help employers digitize HR through WhatsApp.
-
-*📱 What We Do:*
-Enable frontline workers to access mobile contracts.
+Jem is a complete HR and benefits platform for deskless teams, built on WhatsApp.
 
 *🔗 Learn More:*
 https://www.jemhr.com/
-
-*📧 Contact:*
-thamsanqa@jemhr.com
 
 Thanks for playing! 🎮"""

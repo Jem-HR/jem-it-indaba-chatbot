@@ -176,6 +176,134 @@ async def get_leaderboard():
         raise HTTPException(status_code=500, detail="Error retrieving leaderboard")
 
 
+@app.post("/admin/notify-lucky-winners")
+async def notify_lucky_winners(request: Request):
+    """
+    Send notifications to lucky draw winners.
+
+    Body: {
+        "winners": [
+            {"phone": "27794673959", "phone_choice": "Oppo A40"},
+            ...
+        ],
+        "send_immediately": false
+    }
+    """
+    try:
+        data = await request.json()
+        winners = data.get("winners", [])
+        send_immediately = data.get("send_immediately", False)
+
+        from app.ai_game.hackmerlin_prompts import get_lucky_draw_winner_message
+        import time
+
+        results = []
+
+        for winner in winners:
+            phone = winner.get("phone")
+            choice = winner.get("phone_choice")
+
+            if not phone or not choice:
+                continue
+
+            message = get_lucky_draw_winner_message(choice)
+
+            if send_immediately:
+                # Send via WhatsApp
+                success = whatsapp_client.send_message(phone, message)
+
+                if success:
+                    # Record in database
+                    msg_id = f"lucky_{phone}_{int(time.time())}"
+                    game_store.record_message_sent(phone, "lucky_draw_winner", msg_id, message)
+                    results.append({"phone": f"{phone[:5]}***", "status": "sent"})
+                else:
+                    results.append({"phone": f"{phone[:5]}***", "status": "failed"})
+            else:
+                # Preview only
+                results.append({"phone": f"{phone[:5]}***", "preview": message[:100]})
+
+        return {
+            "sent": send_immediately,
+            "count": len(results),
+            "results": results
+        }
+
+    except Exception as e:
+        logger.exception(f"Error sending lucky winner notifications: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/admin/notify-non-selected")
+async def notify_non_selected(send_immediately: bool = False):
+    """Send notifications to all winners who weren't selected in draw"""
+    try:
+        from app.ai_game.hackmerlin_prompts import get_non_selected_winner_message
+        import time
+
+        # Lucky draw winners (exclude from notifications)
+        lucky_winners = [
+            '27794673959', '27685515066', '27768916715',
+            '27828286594', '27827723223'
+        ]
+
+        # Get all winners from database
+        leaderboard = game_store.get_leaderboard()
+        all_winners = leaderboard.get("winners", [])
+
+        # Filter out lucky draw winners (need to unmask phone numbers from DB)
+        # For now, query raw winners table
+        from app.postgres_store import Winner
+        session = game_store._get_session()
+
+        try:
+            non_selected = session.query(Winner).filter(
+                Winner.phone_number.notin_(lucky_winners)
+            ).all()
+
+            message = get_non_selected_winner_message()
+            results = []
+
+            for winner in non_selected:
+                phone = winner.phone_number
+
+                if send_immediately:
+                    success = whatsapp_client.send_message(phone, message)
+
+                    if success:
+                        msg_id = f"non_selected_{phone}_{int(time.time())}"
+                        game_store.record_message_sent(phone, "non_selected_winner", msg_id, message)
+                        results.append({"phone": f"{phone[:5]}***", "status": "sent"})
+                    else:
+                        results.append({"phone": f"{phone[:5]}***", "status": "failed"})
+                else:
+                    results.append({"phone": f"{phone[:5]}***", "preview": message[:100]})
+
+            return {
+                "sent": send_immediately,
+                "non_selected_count": len(non_selected),
+                "results": results
+            }
+
+        finally:
+            session.close()
+
+    except Exception as e:
+        logger.exception(f"Error sending non-selected notifications: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/admin/message-stats")
+async def get_message_stats():
+    """Get delivery statistics for winner notifications"""
+    try:
+        stats = game_store.get_message_delivery_stats()
+        return stats
+    except Exception as e:
+        logger.exception(f"Error getting message stats: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @app.post("/ai/hackmerlin")
 async def hackmerlin_game(phone_number: str, message: str):
     """
@@ -318,33 +446,51 @@ async def verify_webhook(
 @app.post("/webhook")
 async def webhook(request: Request):
     """
-    Webhook endpoint to receive WhatsApp messages.
+    Webhook endpoint to receive WhatsApp messages and status updates.
     """
     try:
-        # Get raw body for signature verification
         body = await request.body()
         payload = await request.json()
 
-        # Log incoming webhook
         logger.info(f"Received webhook: {payload}")
 
-        # Verify signature (optional but recommended)
-        signature = request.headers.get("X-Hub-Signature-256", "")
-        # if not WhatsAppClient.verify_webhook_signature(body, signature):
-        #     logger.warning("Invalid webhook signature")
-        #     raise HTTPException(status_code=403, detail="Invalid signature")
+        # Extract entry data
+        entry = payload.get("entry", [{}])[0]
+        changes = entry.get("changes", [{}])[0]
+        value = changes.get("value", {})
 
-        # Parse message
-        message_data = WhatsAppClient.parse_webhook_message(payload)
+        # Handle message status updates (for delivery tracking)
+        if "statuses" in value:
+            for status_update in value.get("statuses", []):
+                msg_id = status_update.get("id")
+                status = status_update.get("status")  # sent, delivered, read, failed
+                timestamp_str = status_update.get("timestamp")
 
-        if message_data:
-            # Process the message
-            await process_message(
-                from_number=message_data["from"],
-                message_text=message_data["text"],
-                message_id=message_data["message_id"],
-                button_id=message_data.get("button_id")
-            )
+                if msg_id and status:
+                    # Convert timestamp
+                    timestamp = datetime.fromtimestamp(int(timestamp_str)) if timestamp_str else None
+
+                    # Update in database
+                    game_store.update_message_status(
+                        whatsapp_message_id=msg_id,
+                        status=status,
+                        timestamp=timestamp
+                    )
+
+                    logger.info(f"📊 Message status update: {msg_id[:10]}... → {status}")
+
+        # Handle regular messages
+        if "messages" in value:
+            message_data = WhatsAppClient.parse_webhook_message(payload)
+
+            if message_data:
+                # Process the message
+                await process_message(
+                    from_number=message_data["from"],
+                    message_text=message_data["text"],
+                    message_id=message_data["message_id"],
+                    button_id=message_data.get("button_id")
+                )
 
         # Always return 200 OK to WhatsApp
         return JSONResponse(content={"status": "ok"}, status_code=200)

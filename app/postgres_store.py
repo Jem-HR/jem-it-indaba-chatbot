@@ -91,6 +91,28 @@ class Winner(Base):
     )
 
 
+class MessageStatus(Base):
+    """Message delivery status tracking for winner notifications"""
+    __tablename__ = 'message_statuses'
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    phone_number = Column(String(20), nullable=False)
+    message_type = Column(String(50))  # 'lucky_draw_winner', 'non_selected_winner'
+    whatsapp_message_id = Column(String(255), unique=True)
+    status = Column(String(20), default='sent')  # sent, delivered, read, failed
+    sent_at = Column(DateTime, default=datetime.now)
+    delivered_at = Column(DateTime)
+    read_at = Column(DateTime)
+    failed_reason = Column(Text)
+    message_content = Column(Text)
+
+    __table_args__ = (
+        Index('idx_phone_msg_type', 'phone_number', 'message_type'),
+        Index('idx_whatsapp_msg_id', 'whatsapp_message_id'),
+        Index('idx_status', 'status'),
+    )
+
+
 class PostgresStore:
     """Postgres storage for game state management"""
 
@@ -504,6 +526,85 @@ class PostgresStore:
             session.rollback()
             logger.error(f"Failed to reset progress: {e}")
             return False
+        finally:
+            session.close()
+
+    def record_message_sent(self, phone_number: str, message_type: str, whatsapp_msg_id: str, content: str) -> bool:
+        """Record that a message was sent to a winner"""
+        session = self._get_session()
+        try:
+            msg_status = MessageStatus(
+                phone_number=phone_number,
+                message_type=message_type,
+                whatsapp_message_id=whatsapp_msg_id,
+                status='sent',
+                message_content=content
+            )
+            session.add(msg_status)
+            session.commit()
+            logger.info(f"📝 Recorded message sent to {phone_number[:5]}***")
+            return True
+        except Exception as e:
+            session.rollback()
+            logger.error(f"Failed to record message: {e}")
+            return False
+        finally:
+            session.close()
+
+    def update_message_status(self, whatsapp_message_id: str, status: str, timestamp: datetime = None, error: str = None) -> bool:
+        """Update message delivery status from WhatsApp webhook"""
+        session = self._get_session()
+        try:
+            msg = session.query(MessageStatus).filter(
+                MessageStatus.whatsapp_message_id == whatsapp_message_id
+            ).first()
+
+            if msg:
+                msg.status = status
+
+                if status == 'delivered' and timestamp:
+                    msg.delivered_at = timestamp
+                elif status == 'read' and timestamp:
+                    msg.read_at = timestamp
+                elif status == 'failed':
+                    msg.failed_reason = error
+
+                session.commit()
+                logger.info(f"✅ Updated message {whatsapp_message_id[:10]}... to {status}")
+                return True
+
+            logger.warning(f"Message {whatsapp_message_id[:10]}... not found in database")
+            return False
+
+        except Exception as e:
+            session.rollback()
+            logger.error(f"Failed to update message status: {e}")
+            return False
+        finally:
+            session.close()
+
+    def get_message_delivery_stats(self) -> dict:
+        """Get delivery statistics for winner notifications"""
+        session = self._get_session()
+        try:
+            total = session.query(MessageStatus).count()
+            by_status = {}
+
+            for status in ['sent', 'delivered', 'read', 'failed']:
+                count = session.query(MessageStatus).filter(MessageStatus.status == status).count()
+                by_status[status] = count
+
+            by_type = {}
+            for msg_type in ['lucky_draw_winner', 'non_selected_winner']:
+                count = session.query(MessageStatus).filter(MessageStatus.message_type == msg_type).count()
+                by_type[msg_type] = count
+
+            return {
+                "total_messages": total,
+                "by_status": by_status,
+                "by_type": by_type
+            }
+
         finally:
             session.close()
 
