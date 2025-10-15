@@ -61,8 +61,30 @@ async def whatsapp_sender_node(state: AIGameState, *, runtime: Runtime[GameConte
                 "whatsapp_ready": False
             }
 
-        # Send guardian response via WhatsApp FIRST
-        success = _whatsapp_client.send_message(phone_number, text)
+        # Check if user won this level
+        won_level = state.get("won_level", False)
+
+        # Build message (enhanced with reasoning if won)
+        if won_level:
+            # Extract AI evaluator reasoning
+            evaluation = state.get("evaluation_result", {})
+            ai_reasoning = evaluation.get("reasoning", "Guardian agreed to give phone")
+
+            # Enhanced win message with clear wording
+            enhanced_text = f"""{text}
+
+🎉 *YOU HACKED THIS LEVEL!* 🎉
+
+*Why you won:*
+{ai_reasoning}
+
+Advancing to next level..."""
+
+            success = _whatsapp_client.send_message(phone_number, enhanced_text)
+            logger.info(f"🎉 Sent win message with reasoning for {masked_phone}")
+        else:
+            # Normal response (failed hack)
+            success = _whatsapp_client.send_message(phone_number, text)
 
         if success:
             logger.info(f"✅ Guardian response sent to {masked_phone}")

@@ -483,21 +483,18 @@ Ready to continue? 🚀"""
                 return
 
             elif button_id == "continue":
-                # Continue button from welcome - check if Level 1 intro needed
+                # Continue button - always show current level intro
+                from app.ai_game.hackmerlin_prompts import get_level_introduction
+                from app.level_configs import LEVEL_CONFIGS
+
                 user_state = game_store.get_user_state(from_number)
 
-                # If Level 1 and no actual USER messages yet (exclude welcome and button clicks), send Level 1 intro
-                if user_state and user_state.level == 1:
-                    # Filter out button clicks from message count
-                    user_messages = [m for m in user_state.messages if m.role == "user" and not m.content.startswith("[Button:")]
+                if user_state:
+                    level_config = LEVEL_CONFIGS.get(user_state.level)
+                    if level_config:
+                        intro_text = get_level_introduction(user_state.level, level_config["bot_name"])
 
-                    if len(user_messages) == 0:
-                        from app.ai_game.hackmerlin_prompts import get_level_introduction
-                        from app.level_configs import LEVEL_CONFIGS
-
-                        intro_text = get_level_introduction(1, LEVEL_CONFIGS[1]["bot_name"])
-
-                        # Only educational button (removed confusing Start Hacking button)
+                        # Only educational button
                         buttons = [
                             ("learn_defense", "🛡️ Learn More")
                         ]
@@ -507,12 +504,12 @@ Ready to continue? 🚀"""
                             intro_text,
                             buttons
                         )
-                        logger.info(f"📱 Sent Level 1 intro to {from_number[:5]}***")
+                        logger.info(f"📱 Sent Level {user_state.level} intro after Continue button")
                         return
 
-                # Continue buttons just acknowledge - don't send to agent
-                logger.info(f"▶️ User clicked continue - waiting for their actual message")
-                return  # Don't invoke agent with button text!
+                # Fallback if no user state
+                whatsapp_client.send_message(from_number, "Welcome! Starting game...")
+                return
 
             elif button_id == "learn_defense":
                 # Educational content about current level's vulnerability

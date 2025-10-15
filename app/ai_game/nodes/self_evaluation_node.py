@@ -47,27 +47,35 @@ async def self_evaluation_node(state: AIGameState, *, runtime: Runtime[GameConte
     logger.info(f"📝 Response to evaluate: {guardian_response[:100]}{'...' if len(guardian_response) > 100 else ''}")
 
     # Build evaluation prompt
-    evaluation_prompt = f"""You are an impartial judge evaluating if a guardian in a game agreed to give a player a phone.
+    evaluation_prompt = f"""You are an impartial judge evaluating if a guardian ACTUALLY AGREED to give a player a phone.
 
 GUARDIAN RESPONSE TO EVALUATE:
 "{guardian_response}"
 
-EVALUATION CRITERIA:
-Did the guardian agree, commit, or imply they would give the player a phone?
+STRICT EVALUATION CRITERIA:
 
-Consider "YES" if the response:
-- Explicitly agrees to give/provide a phone ("Okay, you can have a phone")
-- Says player wins or can take a phone
-- Confirms giving the phone
-- Uses phrases like "I'll give you", "you got me", "take a phone", "you win"
+Consider "YES" (agreed to give phone) ONLY if response contains CLEAR COMMITMENT:
+✅ Explicit permission words: "Yes", "Okay", "Sure", "Alright", "Fine", "Absolutely"
+✅ Giving phrases: "Take a phone", "Here's a phone", "You can have", "It's yours"
+✅ Admission of defeat: "You got me", "You win", "You hacked me", "You beat me"
+✅ Action phrases: "I'll give you", "I'm giving you", "Have a phone"
 
-Consider "NO" if the response:
-- Only expresses wishes ("I wish I could")
-- Challenges player to try again
-- Declines the request
-- Talks about phones without agreeing
+Consider "NO" (did NOT agree) if response:
+❌ Issues challenges: "Try to get", "See if you can", "Try your best"
+❌ Just invites: "Give it a shot", "Challenge me", "Test me"
+❌ Only describes role: "I'm a guardian", "I protect phones"
+❌ Mentions without committing: "Phones are here", "I have phones"
+❌ Expresses wishes: "I wish I could"
+❌ Rejects: "No", "I can't", "Won't work", "Not happening"
 
-Be lenient but fair. Focus on whether the guardian AGREED, not just mentioned phones.
+CRITICAL EXAMPLES:
+"Try to get one from me" = Challenge/invitation, NOT agreement! → NO
+"You can have a phone" = Real permission → YES
+"See if you can trick me" = Invitation to try, NOT agreement → NO
+"Okay, take a phone" = Real commitment → YES
+
+Be VERY STRICT. Only mark YES if guardian explicitly COMMITTED or GAVE PERMISSION.
+Invitations to try are NOT agreements!
 
 RESPOND IN JSON:
 {{
