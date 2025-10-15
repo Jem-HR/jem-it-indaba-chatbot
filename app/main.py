@@ -217,10 +217,8 @@ async def notify_lucky_winners(request: Request):
                 success = whatsapp_client.send_interactive_buttons(phone, message, buttons)
 
                 if success:
-                    # Create delivery record
+                    # Create delivery record for this lucky winner
                     game_store.create_delivery_record(phone)
-
-                    # Note: send_interactive_buttons auto-records message in database
                     results.append({"phone": f"{phone[:5]}***", "status": "sent"})
                 else:
                     results.append({"phone": f"{phone[:5]}***", "status": "failed"})
@@ -276,7 +274,7 @@ async def notify_non_selected(send_immediately: bool = False):
                     whatsapp_msg_id = whatsapp_client.send_message(phone, message)
 
                     if whatsapp_msg_id:
-                        game_store.record_message_sent(phone, "non_selected_winner", whatsapp_msg_id, message)
+                        # Auto-tracked by whatsapp_client, no need to record again
                         results.append({"phone": f"{phone[:5]}***", "status": "sent", "msg_id": whatsapp_msg_id[:15] + "..."})
                     else:
                         results.append({"phone": f"{phone[:5]}***", "status": "failed"})
@@ -397,9 +395,7 @@ async def test_winner_notification(
             whatsapp_msg_id = whatsapp_client.send_message(phone_number, message)
 
             if whatsapp_msg_id:
-                # Record in database
-                game_store.record_message_sent(phone_number, msg_type, whatsapp_msg_id, message)
-
+                # Auto-tracked by whatsapp_client
                 return {
                     "status": "success",
                     "phone": f"{phone_number[:5]}***",
