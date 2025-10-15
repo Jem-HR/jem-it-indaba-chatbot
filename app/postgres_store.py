@@ -829,7 +829,8 @@ class PostgresStore:
         # Hardcoded lucky draw winners list from main.py
         lucky_winners = [
             '27794673959', '27685515066', '27768916715',
-            '27828286594', '27827723223'
+            '27828286594', '27827723223',
+            '27782440774'  # Test number for delivery flow testing
         ]
         return phone_number in lucky_winners
 
