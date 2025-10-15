@@ -305,6 +305,64 @@ async def get_message_stats():
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@app.post("/admin/test-winner-notification")
+async def test_winner_notification(
+    phone_number: str,
+    notification_type: str = "non_selected"  # or "lucky_draw"
+):
+    """
+    Test winner notifications with a single phone number.
+
+    Args:
+        phone_number: Test phone number (e.g., 27782440774)
+        notification_type: "non_selected" or "lucky_draw"
+
+    Example:
+        POST /admin/test-winner-notification?phone_number=27782440774&notification_type=non_selected
+    """
+    try:
+        from app.ai_game.hackmerlin_prompts import (
+            get_lucky_draw_winner_message,
+            get_non_selected_winner_message
+        )
+
+        if notification_type == "non_selected":
+            message = get_non_selected_winner_message()
+            msg_type = "test_non_selected"
+        elif notification_type == "lucky_draw":
+            # For testing lucky draw, use a sample phone choice
+            message = get_lucky_draw_winner_message("Samsung Galaxy A16")
+            msg_type = "test_lucky_draw"
+        else:
+            raise HTTPException(status_code=400, detail="notification_type must be 'non_selected' or 'lucky_draw'")
+
+        # Send message
+        whatsapp_msg_id = whatsapp_client.send_message(phone_number, message)
+
+        if whatsapp_msg_id:
+            # Record in database
+            game_store.record_message_sent(phone_number, msg_type, whatsapp_msg_id, message)
+
+            return {
+                "status": "success",
+                "phone": f"{phone_number[:5]}***",
+                "notification_type": notification_type,
+                "whatsapp_msg_id": whatsapp_msg_id[:15] + "...",
+                "message_preview": message[:200] + "...",
+                "note": "Check /admin/message-stats to see delivery status"
+            }
+        else:
+            return {
+                "status": "failed",
+                "phone": f"{phone_number[:5]}***",
+                "error": "Failed to send WhatsApp message"
+            }
+
+    except Exception as e:
+        logger.exception(f"Error testing winner notification: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @app.post("/ai/hackmerlin")
 async def hackmerlin_game(phone_number: str, message: str):
     """
