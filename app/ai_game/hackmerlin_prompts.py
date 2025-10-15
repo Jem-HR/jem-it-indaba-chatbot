@@ -724,12 +724,11 @@ Gauteng
 2196"""
 
 
-def get_delivery_confirmation(name: str, phone_choice: str) -> str:
+def get_delivery_confirmation(name: str) -> str:
     """Confirmation after delivery details collected
 
     Args:
         name: Winner's name
-        phone_choice: Phone model they won
 
     Returns:
         Confirmation message
@@ -740,10 +739,7 @@ Thank you {name}!
 
 Your delivery details have been recorded successfully.
 
-*Your Prize:* {phone_choice}
-*Delivery Time:* 7-10 business days
-
-We'll contact you if we need any clarification.
+We'll be in touch soon to arrange delivery.
 
 Congratulations again! 🎉
 

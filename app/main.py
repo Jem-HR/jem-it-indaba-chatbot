@@ -678,20 +678,13 @@ async def process_message(from_number: str, message_text: str, message_id: str, 
                 # Save address and send confirmation
                 game_store.update_delivery_address(from_number, message_text)
 
-                # Get winner info for confirmation
-                session = game_store._get_session()
-                try:
-                    winner = session.query(Winner).filter(Winner.phone_number == from_number).first()
-                    phone_choice = winner.preferred_phone if winner else "your phone"
+                # Get winner name for confirmation
+                delivery_details = game_store.get_delivery_details(from_number)
+                name = delivery_details.get("winner_name", "Winner") if delivery_details else "Winner"
 
-                    delivery_details = game_store.get_delivery_details(from_number)
-                    name = delivery_details.get("winner_name", "Winner") if delivery_details else "Winner"
-
-                    confirmation_msg = get_delivery_confirmation(name, phone_choice)
-                    whatsapp_client.send_message(from_number, confirmation_msg)
-                    logger.info(f"✅ Delivery info complete for {from_number[:5]}***")
-                finally:
-                    session.close()
+                confirmation_msg = get_delivery_confirmation(name)
+                whatsapp_client.send_message(from_number, confirmation_msg)
+                logger.info(f"✅ Delivery info complete for {from_number[:5]}***")
                 return
 
         # COMPETITION CLOSED - Handle only 3 screens for everyone else
