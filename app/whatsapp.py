@@ -3,19 +3,27 @@
 import hmac
 import hashlib
 import requests
+import logging
 from typing import Optional, Dict, Any, List, Tuple
 from app.config import config
+
+logger = logging.getLogger(__name__)
 
 
 class WhatsAppClient:
     """Client for WhatsApp Cloud API."""
 
-    def __init__(self):
-        """Initialize WhatsApp client."""
+    def __init__(self, game_store=None):
+        """Initialize WhatsApp client.
+
+        Args:
+            game_store: Optional PostgresStore instance for message tracking
+        """
         self.api_token = config.WHATSAPP_API_TOKEN
         self.phone_number_id = config.WHATSAPP_PHONE_NUMBER_ID
         self.api_version = config.WHATSAPP_API_VERSION
         self.base_url = f"https://graph.facebook.com/{self.api_version}/{self.phone_number_id}"
+        self.game_store = game_store
 
     def send_message(self, to: str, message: str) -> Optional[str]:
         """
@@ -50,6 +58,19 @@ class WhatsAppClient:
             # Extract WhatsApp message ID from response
             response_data = response.json()
             message_id = response_data.get("messages", [{}])[0].get("id")
+
+            # Auto-track message if game_store available
+            if message_id and self.game_store:
+                try:
+                    self.game_store.record_message_sent(
+                        phone_number=to,
+                        message_type="text_message",
+                        whatsapp_msg_id=message_id,
+                        content=message[:500]  # Limit to 500 chars
+                    )
+                except Exception as e:
+                    logger.warning(f"Failed to auto-track message: {e}")
+
             return message_id
         except requests.exceptions.RequestException as e:
             print(f"Error sending WhatsApp message: {e}")
@@ -166,6 +187,22 @@ class WhatsAppClient:
         try:
             response = requests.post(url, json=payload, headers=headers)
             response.raise_for_status()
+
+            # Extract message ID and auto-track
+            response_data = response.json()
+            message_id = response_data.get("messages", [{}])[0].get("id")
+
+            if message_id and self.game_store:
+                try:
+                    self.game_store.record_message_sent(
+                        phone_number=to,
+                        message_type="interactive_message",
+                        whatsapp_msg_id=message_id,
+                        content=body_text[:500]
+                    )
+                except Exception as e:
+                    logger.warning(f"Failed to auto-track interactive message: {e}")
+
             return True
         except requests.exceptions.RequestException as e:
             print(f"Error sending WhatsApp interactive message: {e}")

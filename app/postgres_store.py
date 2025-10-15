@@ -551,8 +551,19 @@ class PostgresStore:
         finally:
             session.close()
 
-    def update_message_status(self, whatsapp_message_id: str, status: str, timestamp: datetime = None, error: str = None) -> bool:
-        """Update message delivery status from WhatsApp webhook"""
+    def update_message_status(self, whatsapp_message_id: str, status: str, timestamp: datetime = None, error: str = None, phone_number: str = None) -> bool:
+        """Update message delivery status from WhatsApp webhook
+
+        Args:
+            whatsapp_message_id: WhatsApp message ID
+            status: Status (sent, delivered, read, failed)
+            timestamp: Status timestamp
+            error: Error reason if failed
+            phone_number: Recipient phone number (for creating new record)
+
+        Returns:
+            True if successful
+        """
         session = self._get_session()
         try:
             msg = session.query(MessageStatus).filter(
@@ -560,6 +571,7 @@ class PostgresStore:
             ).first()
 
             if msg:
+                # Update existing record
                 msg.status = status
 
                 if status == 'delivered' and timestamp:
@@ -572,10 +584,32 @@ class PostgresStore:
                 session.commit()
                 logger.info(f"✅ Updated message {whatsapp_message_id[:10]}... to {status}")
                 return True
+            else:
+                # Create new record for messages sent before tracking was enabled
+                if not phone_number:
+                    logger.debug(f"Cannot create record for {whatsapp_message_id[:10]}... - no phone number provided")
+                    return False
 
-            # Silently ignore non-tracked messages (regular game messages, not winner notifications)
-            logger.debug(f"Message {whatsapp_message_id[:10]}... not tracked (regular game message)")
-            return False
+                msg = MessageStatus(
+                    phone_number=phone_number,
+                    message_type="unknown",  # We don't know the type
+                    whatsapp_message_id=whatsapp_message_id,
+                    status=status,
+                    sent_at=datetime.now(),  # Approximate
+                    message_content="[Message sent before tracking enabled]"
+                )
+
+                if status == 'delivered' and timestamp:
+                    msg.delivered_at = timestamp
+                elif status == 'read' and timestamp:
+                    msg.read_at = timestamp
+                elif status == 'failed':
+                    msg.failed_reason = error
+
+                session.add(msg)
+                session.commit()
+                logger.info(f"📝 Created new record for message {whatsapp_message_id[:10]}... with status {status}")
+                return True
 
         except Exception as e:
             session.rollback()

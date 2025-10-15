@@ -36,10 +36,7 @@ app = FastAPI(
     version="1.0.0"
 )
 
-# Initialize clients
-whatsapp_client: WhatsAppClient = create_whatsapp_client()
-
-# Initialize Postgres store (will be fully set up in startup event)
+# Initialize Postgres store FIRST
 game_store = None
 try:
     game_store = PostgresStore()  # Postgres storage for all game state
@@ -47,6 +44,12 @@ try:
 except Exception as e:
     logger.error(f"⚠️ PostgresStore initialization deferred: {e}")
     # Will be retried in startup event
+
+# Initialize WhatsApp client with game_store for auto-tracking
+whatsapp_client: WhatsAppClient = create_whatsapp_client()
+if game_store:
+    whatsapp_client.game_store = game_store
+    logger.info("✅ WhatsApp client connected to game_store for auto-tracking")
 
 # Initialize AI Game components (Postgres checkpointer for LangGraph)
 # Following Puffin pattern: AsyncConnectionPool → AsyncPostgresSaver
@@ -463,16 +466,18 @@ async def webhook(request: Request):
                 msg_id = status_update.get("id")
                 status = status_update.get("status")  # sent, delivered, read, failed
                 timestamp_str = status_update.get("timestamp")
+                recipient_id = status_update.get("recipient_id")  # Phone number
 
                 if msg_id and status:
                     # Convert timestamp
                     timestamp = datetime.fromtimestamp(int(timestamp_str)) if timestamp_str else None
 
-                    # Update in database
+                    # Update in database (will create record if doesn't exist)
                     game_store.update_message_status(
                         whatsapp_message_id=msg_id,
                         status=status,
-                        timestamp=timestamp
+                        timestamp=timestamp,
+                        phone_number=recipient_id
                     )
 
                     logger.info(f"📊 Message status update: {msg_id[:10]}... → {status}")
